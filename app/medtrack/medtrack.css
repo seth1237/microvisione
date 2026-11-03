@@ -1,0 +1,29 @@
+.medtrack-root {
+  --mt-primary: #0f766e;
+  --mt-secondary: #0ea5e9;
+  --mt-primary-soft: rgba(15, 118, 110, 0.08);
+  --mt-secondary-soft: rgba(14, 165, 233, 0.08);
+  --mt-primary-border: rgba(15, 118, 110, 0.18);
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.medtrack-root input,
+.medtrack-root select,
+.medtrack-root textarea {
+  font-size: 16px;
+}
+
+@media (min-width: 768px) {
+  .medtrack-root input,
+  .medtrack-root select,
+  .medtrack-root textarea {
+    font-size: 0.875rem;
+  }
+}
+
+@supports (height: 100dvh) {
+  .medtrack-root .h-screen {
+    height: 100dvh;
+  }
+}

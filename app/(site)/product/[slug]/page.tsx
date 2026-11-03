@@ -1,0 +1,114 @@
+import Link from "next/link";
+import { Suspense } from "react";
+import { notFound } from "next/navigation";
+import { ProductCard } from "@/components/product/product-card";
+import { ProductGallery } from "@/components/product/product-gallery";
+import { ProductTabs } from "@/components/product/product-tabs";
+import { PurchasePanel } from "@/components/product/purchase-panel";
+import { WhiteCanvas } from "@/components/product/white-canvas";
+import { JsonLd } from "@/components/seo/json-ld";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { Container } from "@/components/ui/container";
+import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
+import { absoluteUrl } from "@/lib/site";
+import type { Metadata } from "next";
+
+export async function generateStaticParams() {
+  const products = await getProducts();
+  return products.map((product) => ({ slug: product.slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) return { title: "Product" };
+  return {
+    title: product.name,
+    description: product.shortDescription,
+    alternates: { canonical: `/product/${product.slug}` },
+    openGraph: {
+      title: product.name,
+      description: product.shortDescription,
+      url: `/product/${product.slug}`,
+    },
+  };
+}
+
+export default function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
+  return (
+    <div className="flex-1 bg-white">
+      <WhiteCanvas />
+      <Suspense fallback={<div className="mx-auto max-w-6xl bg-white px-4 py-10 text-sm text-muted">Loading product…</div>}>
+        <ProductContent params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ProductContent({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) notFound();
+  const [brands, categories, related] = await Promise.all([
+    getBrands(),
+    getCategories(),
+    getRelatedProducts(product),
+  ]);
+  const brand = brands.find((item) => item.id === product.brandId);
+  const category = categories.find((item) => item.id === product.categoryId);
+  const url = absoluteUrl(`/product/${product.slug}`);
+
+  return (
+    <Container className="bg-white pt-8 pb-44 lg:py-8">
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: product.name,
+          description: product.shortDescription,
+          sku: product.id,
+          category: category?.name,
+          brand: { "@type": "Brand", name: brand?.name ?? "Manufacturer TBC" },
+          url,
+        }}
+      />
+      <Breadcrumbs
+        items={[
+          { href: "/", label: "Home" },
+          { href: "/products", label: "Products" },
+          ...(category ? [{ href: `/category/${category.slug}`, label: category.name }] : []),
+          { label: product.name },
+        ]}
+      />
+      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.8fr)]">
+        <div className="min-w-0">
+          <h1 className="text-3xl text-ink sm:text-4xl">{product.name}</h1>
+          <div className="mt-6">
+            <ProductGallery name={product.name} photoUrl={product.photoUrl} />
+          </div>
+          <ProductTabs product={product} />
+        </div>
+        <PurchasePanel product={product} brandName={brand?.name ?? "Manufacturer TBC"} />
+      </div>
+      {related.length > 0 ? (
+        <section className="mt-12" aria-labelledby="related-heading">
+          <h2 id="related-heading" className="text-2xl">Related products</h2>
+          <ul className="mt-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
+            {related.map((item) => (
+              <li key={item.id}>
+                <ProductCard product={item} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <p className="mt-8 text-sm text-muted">
+        <Link href="/legal/returns" className="font-semibold text-brand">Returns and warranty</Link>
+      </p>
+    </Container>
+  );
+}

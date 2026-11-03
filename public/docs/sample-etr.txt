@@ -1,0 +1,4 @@
+SAMPLE — not an ETR receipt
+Microvision Enterprises Ltd
+Reference: MVO-2026-1042
+No KRA control code is included because this is interface sample data.

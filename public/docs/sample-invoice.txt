@@ -1,0 +1,5 @@
+SAMPLE — not a tax invoice
+Microvision Enterprises Ltd
+Reference: MVO-2026-1042
+Amount shown on the account page uses an example price.
+Replace this file with a real invoice export.

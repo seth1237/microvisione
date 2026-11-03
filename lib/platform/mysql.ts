@@ -1,0 +1,2867 @@
+// @ts-nocheck
+import { setDefaultResultOrder } from 'node:dns'
+import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from 'mysql2/promise'
+import type { Catalogue, CatalogueDownload, CompanyProfilePage, MediaAsset, OfferEvent } from '@/lib/platform/content'
+import type { CatalogCategory, CatalogProduct } from '@/lib/platform/catalog'
+import { parseCheckoutStatus, type CheckoutItem, type CheckoutOrder, type CheckoutStatus } from '@/lib/platform/checkout'
+import { publicCategorySlug, slugifyName } from '@/lib/platform/catalog'
+import type { ClientInterestRow, CustomerAccount, CustomerInterestProduct, CustomerPurchaseProduct } from '@/lib/platform/customers'
+import type { JobApplication } from '@/lib/platform/jobs'
+import { clampRange, defaultRange, fillVisitorSeries, isIsoDate, monthStart, parsePeriod, weekStart } from '@/lib/platform/visitor-report'
+import {
+  fillSearchSeries,
+  isPrefixSearchUpdate,
+  normalizeSearchQuery,
+  parseSearchKind,
+  searchActivityLabel,
+  searchEventLabel,
+  searchQueryKey,
+  searchRange,
+  type SearchEventInput,
+  type SearchHistoryRow,
+  type SearchReport,
+} from '@/lib/platform/search-analytics'
+import { deleteStoredDocument, isDocumentKind, readStoredDocument, writeStoredDocument } from '@/lib/platform/local-files'
+
+setDefaultResultOrder('ipv4first')
+
+type AdminUser = {
+  _id?: string
+  username?: string
+  email: string
+  name: string
+  passwordHash: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+type ProductImage = MediaAsset
+
+type ProductContent = {
+  erpProductId: string
+  details: string
+  images: ProductImage[]
+  distributedFor?: string
+  highlights?: string[]
+  updatedAt: Date
+}
+
+type SiteSettings = {
+  _id: string
+  showPrices: boolean
+  updatedAt: Date
+}
+
+const MYSQL_SCHEMA_VERSION = 16
+
+type MysqlState = {
+  pool: Pool | null
+  schemaReady: boolean
+  schemaVersion: number
+  schemaPromise: Promise<void> | null
+  localCatalogReady: { at: number; ready: boolean } | null
+  downUntil: number
+  warmPromise: Promise<Pool> | null
+  loggedDown: boolean
+}
+
+const globalForMysql = globalThis as typeof globalThis & { __accordMysql?: MysqlState }
+
+function mysqlState(): MysqlState {
+  if (!globalForMysql.__accordMysql) {
+    globalForMysql.__accordMysql = {
+      pool: null,
+      schemaReady: false,
+      schemaVersion: 0,
+      schemaPromise: null,
+      localCatalogReady: null,
+      downUntil: 0,
+      warmPromise: null,
+      loggedDown: false,
+    }
+  }
+  const state = globalForMysql.__accordMysql
+  if (typeof state.downUntil !== 'number') state.downUntil = 0
+  if (typeof state.loggedDown !== 'boolean') state.loggedDown = false
+  if (!('warmPromise' in state)) state.warmPromise = null
+  return state
+}
+
+export function isMysqlConfigured() {
+  return Boolean(process.env.MYSQL_HOST && process.env.MYSQL_USER && process.env.MYSQL_DATABASE)
+}
+
+export function isStoreConfigured() {
+  return isMysqlConfigured() || Boolean(process.env.MONGODB_URI)
+}
+
+function mysqlId(value: string | number | undefined | null) {
+  const id = Number(value)
+  if (!Number.isInteger(id) || id <= 0) return null
+  return id
+}
+
+function iso(value?: Date | string | null) {
+  if (!value) return ''
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+}
+
+function fileAsset(id: number, extra?: { installation?: boolean }): MediaAsset {
+  return {
+    publicId: `mysql:file:${id}`,
+    secureUrl: `/api/media/file/${id}`,
+    ...(extra?.installation ? { installation: true } : {}),
+  }
+}
+
+function catalogueAsset(id: number): MediaAsset {
+  return { publicId: `mysql:catalogue:${id}`, secureUrl: `/api/catalogues/${id}/download` }
+}
+
+export function mysqlFileIdFromPublicId(publicId: string) {
+  const match = /^mysql:(?:file|catalogue):(\d+)$/.exec(publicId)
+  return match ? Number(match[1]) : null
+}
+
+export function isMysqlConnectError(error: unknown) {
+  const code = (error as { code?: string }).code
+  return code === 'ETIMEDOUT' || code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'ENETUNREACH'
+}
+
+function isMysqlFatal(error: unknown) {
+  if (isMysqlConnectError(error)) return false
+  const err = error as { code?: string; fatal?: boolean }
+  return Boolean(err.fatal)
+    || err.code === 'PROTOCOL_CONNECTION_LOST'
+    || err.code === 'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR'
+    || err.code === 'ECONNRESET'
+}
+
+function mysqlUnreachableError() {
+  const host = process.env.MYSQL_HOST || 'MYSQL_HOST'
+  const port = process.env.MYSQL_PORT || '3306'
+  const error = new Error(`Cannot reach MySQL at ${host}:${port}`) as Error & { code: string }
+  error.code = 'ETIMEDOUT'
+  return error
+}
+
+function markMysqlDown(error: unknown) {
+  if (!isMysqlConnectError(error)) return
+  const state = mysqlState()
+  state.downUntil = Date.now() + 20_000
+  if (state.loggedDown) return
+  state.loggedDown = true
+  console.error(`MySQL unreachable (${(error as { code?: string }).code}). Retrying in 20s.`)
+}
+
+async function resetMysqlPool() {
+  const state = mysqlState()
+  const pool = state.pool
+  state.pool = null
+  state.schemaReady = false
+  state.schemaVersion = 0
+  state.schemaPromise = null
+  state.localCatalogReady = null
+  state.warmPromise = null
+  if (pool) await pool.end().catch(() => {})
+}
+
+async function getPool(): Promise<Pool> {
+  if (!isMysqlConfigured()) throw new Error('MySQL is not configured')
+  const state = mysqlState()
+  if (Date.now() < state.downUntil) throw mysqlUnreachableError()
+  if (state.pool && !state.warmPromise) return state.pool
+  if (state.warmPromise) return state.warmPromise
+
+  const pool = mysql.createPool({
+    host: process.env.MYSQL_HOST,
+    port: Number(process.env.MYSQL_PORT || 3306),
+    user: process.env.MYSQL_USER,
+    password: process.env.MYSQL_PASSWORD || '',
+    database: process.env.MYSQL_DATABASE,
+    waitForConnections: true,
+    connectionLimit: 4,
+    enableKeepAlive: true,
+    charset: 'utf8mb4',
+    connectTimeout: 15_000,
+  })
+  state.pool = pool
+  state.warmPromise = (async () => {
+    try {
+      const conn = await pool.getConnection()
+      conn.release()
+      state.downUntil = 0
+      state.loggedDown = false
+      return pool
+    } catch (error) {
+      markMysqlDown(error)
+      state.pool = null
+      await pool.end().catch(() => {})
+      throw error
+    }
+  })().finally(() => {
+    if (state.warmPromise) state.warmPromise = null
+  })
+  return state.warmPromise
+}
+
+async function withMysqlRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (error) {
+    if (!isMysqlFatal(error)) throw error
+    await resetMysqlPool()
+    return fn()
+  }
+}
+
+async function mysqlAddColumnIfMissing(table: string, column: string, definition: string) {
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column],
+  )
+  if (Number(rows[0]?.n)) return
+  await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN ${definition}`)
+}
+
+async function applyMysqlSchema() {
+  const pool = await getPool()
+  let productsExist = false
+  try {
+    await pool.query('SELECT 1 FROM accord_nx_products LIMIT 1')
+    productsExist = true
+  } catch (error) {
+    const code = (error as { code?: string }).code
+    if (code !== 'ER_NO_SUCH_TABLE' && code !== 'ER_BAD_TABLE_ERROR') throw error
+  }
+  if (!productsExist) {
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_files (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      kind VARCHAR(32) NOT NULL,
+      owner_key VARCHAR(191) NOT NULL DEFAULT '',
+      filename VARCHAR(255) NOT NULL,
+      mime VARCHAR(128) NOT NULL,
+      file_data LONGBLOB NOT NULL,
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY kind_owner (kind, owner_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_admins (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      username VARCHAR(191) NOT NULL,
+      email VARCHAR(191) NOT NULL,
+      name VARCHAR(191) NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      UNIQUE KEY username (username),
+      UNIQUE KEY email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_catalogues (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      title VARCHAR(255) NOT NULL,
+      erp_product_id VARCHAR(64) NOT NULL,
+      category_id VARCHAR(128) NOT NULL DEFAULT '',
+      product_name VARCHAR(255) NOT NULL DEFAULT '',
+      file_id INT UNSIGNED NOT NULL,
+      download_count INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY erp_product_id (erp_product_id),
+      KEY download_count (download_count)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_catalogue_downloads (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      catalogue_id INT UNSIGNED NOT NULL,
+      product_id VARCHAR(64) NOT NULL DEFAULT '',
+      ip_hash VARCHAR(64) NOT NULL DEFAULT '',
+      referrer VARCHAR(512) NOT NULL DEFAULT '',
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY catalogue_created (catalogue_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_product_content (
+      erp_product_id VARCHAR(64) NOT NULL,
+      details MEDIUMTEXT NOT NULL,
+      distributed_for VARCHAR(255) NOT NULL DEFAULT '',
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (erp_product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_site_settings (
+      id VARCHAR(32) NOT NULL,
+      show_prices TINYINT(1) NOT NULL DEFAULT 1,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_docs (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      kind VARCHAR(64) NOT NULL,
+      slug VARCHAR(191) NOT NULL DEFAULT '',
+      published TINYINT(1) NOT NULL DEFAULT 1,
+      payload LONGTEXT NOT NULL,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY kind_slug (kind, slug),
+      KEY kind_published (kind, published, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_product_performance (
+      erp_product_id VARCHAR(64) NOT NULL,
+      product_name VARCHAR(255) NOT NULL DEFAULT '',
+      category_id VARCHAR(128) NOT NULL DEFAULT '',
+      category_name VARCHAR(255) NOT NULL DEFAULT '',
+      clicks INT NOT NULL DEFAULT 0,
+      shares INT NOT NULL DEFAULT 0,
+      last_clicked_at DATETIME NULL,
+      last_shared_at DATETIME NULL,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (erp_product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_product_journeys (
+      from_product_id VARCHAR(64) NOT NULL,
+      to_product_id VARCHAR(64) NOT NULL,
+      journey_count INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (from_product_id, to_product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_products (
+      id VARCHAR(64) NOT NULL,
+      slug VARCHAR(191) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      product_type VARCHAR(191) NOT NULL DEFAULT '',
+      description MEDIUMTEXT NOT NULL,
+      details MEDIUMTEXT NOT NULL,
+      price DECIMAL(12,2) NOT NULL DEFAULT 0,
+      compare_at DECIMAL(12,2) NULL,
+      manufacturer VARCHAR(255) NOT NULL DEFAULT '',
+      category_id VARCHAR(128) NOT NULL,
+      category_name VARCHAR(255) NOT NULL,
+      featured TINYINT(1) NOT NULL DEFAULT 0,
+      in_stock TINYINT(1) NOT NULL DEFAULT 1,
+      created_on VARCHAR(64) NOT NULL DEFAULT '',
+      imported_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      UNIQUE KEY slug (slug),
+      KEY category_id (category_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  }
+  await mysqlAddColumnIfMissing('accord_nx_files', 'source_url', `source_url VARCHAR(512) NOT NULL DEFAULT ''`)
+  await mysqlAddColumnIfMissing('accord_nx_files', 'storage_path', `storage_path VARCHAR(512) NOT NULL DEFAULT ''`)
+  await mysqlAddColumnIfMissing('accord_nx_site_settings', 'use_local_catalog', `use_local_catalog TINYINT(1) NOT NULL DEFAULT 0`)
+  await mysqlAddColumnIfMissing('accord_nx_products', 'seo', `seo LONGTEXT NULL`)
+  await mysqlAddColumnIfMissing('accord_nx_products', 'hidden', `hidden TINYINT(1) NOT NULL DEFAULT 0`)
+  await mysqlAddColumnIfMissing('accord_nx_products', 'checkout', `checkout TINYINT(1) NOT NULL DEFAULT 0`)
+  await mysqlAddColumnIfMissing('accord_nx_product_content', 'highlights', `highlights TEXT NULL`)
+  await mysqlAddColumnIfMissing('accord_nx_product_performance', 'carts', `carts INT NOT NULL DEFAULT 0`)
+  await mysqlAddColumnIfMissing('accord_nx_product_performance', 'last_carted_at', `last_carted_at DATETIME NULL`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_site_visits (
+      visit_date DATE NOT NULL,
+      visitor_id VARCHAR(64) NOT NULL,
+      path VARCHAR(255) NOT NULL,
+      hits INT NOT NULL DEFAULT 1,
+      last_seen_at DATETIME NOT NULL,
+      PRIMARY KEY (visit_date, visitor_id, path),
+      KEY visit_date (visit_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_event_likes (
+      event_id INT UNSIGNED NOT NULL,
+      visitor_id VARCHAR(64) NOT NULL,
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (event_id, visitor_id),
+      KEY event_id (event_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_event_comments (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      event_id INT UNSIGNED NOT NULL,
+      visitor_id VARCHAR(64) NOT NULL DEFAULT '',
+      name VARCHAR(80) NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY event_created (event_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_categories (
+      id VARCHAR(128) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT NOT NULL,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_offer_events (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      offer_id VARCHAR(64) NOT NULL DEFAULT '',
+      product_id VARCHAR(64) NOT NULL,
+      product_name VARCHAR(255) NOT NULL DEFAULT '',
+      event_type VARCHAR(32) NOT NULL,
+      path VARCHAR(255) NOT NULL DEFAULT '',
+      visitor_id VARCHAR(64) NOT NULL DEFAULT '',
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY offer_created (offer_id, created_at),
+      KEY product_type_created (product_id, event_type, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_job_applications (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      full_name VARCHAR(191) NOT NULL,
+      email VARCHAR(191) NOT NULL,
+      phone VARCHAR(64) NOT NULL DEFAULT '',
+      department VARCHAR(128) NOT NULL,
+      working_terms VARCHAR(64) NOT NULL,
+      notes MEDIUMTEXT NOT NULL,
+      cv_file_id INT UNSIGNED NULL,
+      cv_filename VARCHAR(255) NOT NULL DEFAULT '',
+      status VARCHAR(32) NOT NULL DEFAULT 'new',
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY status_created (status, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_search_events (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      query_raw VARCHAR(191) NOT NULL,
+      query_norm VARCHAR(191) NOT NULL,
+      result_count INT NOT NULL DEFAULT 0,
+      matched TINYINT(1) NOT NULL DEFAULT 0,
+      source VARCHAR(32) NOT NULL DEFAULT 'live',
+      trigger_name VARCHAR(32) NOT NULL DEFAULT 'idle',
+      path VARCHAR(255) NOT NULL DEFAULT '',
+      visitor_id VARCHAR(64) NOT NULL DEFAULT '',
+      session_id VARCHAR(64) NOT NULL DEFAULT '',
+      product_id VARCHAR(64) NOT NULL DEFAULT '',
+      search_date DATE NOT NULL,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY query_norm (query_norm),
+      KEY matched_created (matched, created_at),
+      KEY visitor_created (visitor_id, created_at),
+      KEY search_date (search_date),
+      KEY created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await mysqlAddColumnIfMissing('accord_nx_search_events', 'search_date', `search_date DATE NULL`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_orders (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      reference VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      customer_name VARCHAR(191) NOT NULL,
+      phone VARCHAR(32) NOT NULL,
+      email VARCHAR(191) NOT NULL DEFAULT '',
+      location VARCHAR(191) NOT NULL DEFAULT '',
+      amount INT NOT NULL DEFAULT 0,
+      items_json MEDIUMTEXT NOT NULL,
+      mpesa_merchant_id VARCHAR(64) NOT NULL DEFAULT '',
+      mpesa_checkout_id VARCHAR(64) NOT NULL DEFAULT '',
+      mpesa_receipt VARCHAR(64) NOT NULL DEFAULT '',
+      mpesa_result VARCHAR(255) NOT NULL DEFAULT '',
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      UNIQUE KEY reference (reference),
+      KEY status_created (status, created_at),
+      KEY mpesa_checkout_id (mpesa_checkout_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await mysqlAddColumnIfMissing('accord_nx_orders', 'customer_id', `customer_id INT UNSIGNED NULL`)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_customers (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      name VARCHAR(191) NOT NULL,
+      facility_name VARCHAR(191) NOT NULL,
+      phone VARCHAR(32) NOT NULL,
+      location VARCHAR(191) NOT NULL DEFAULT '',
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      last_seen_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      UNIQUE KEY phone (phone)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_customer_interest (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      customer_id INT UNSIGNED NOT NULL,
+      product_id VARCHAR(80) NOT NULL,
+      product_name VARCHAR(191) NOT NULL,
+      category_id VARCHAR(80) NOT NULL DEFAULT '',
+      category_name VARCHAR(191) NOT NULL DEFAULT '',
+      clicks INT NOT NULL DEFAULT 0,
+      carts INT NOT NULL DEFAULT 0,
+      last_clicked_at DATETIME NULL,
+      last_carted_at DATETIME NULL,
+      created_at DATETIME NOT NULL,
+      updated_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      UNIQUE KEY customer_product (customer_id, product_id),
+      KEY customer_updated (customer_id, updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+}
+
+export async function ensureMysqlSchema() {
+  const state = mysqlState()
+  if (!isMysqlConfigured() || (state.schemaReady && state.schemaVersion === MYSQL_SCHEMA_VERSION)) return
+  if (!state.schemaPromise) {
+    state.schemaPromise = applyMysqlSchema()
+      .then(() => {
+        state.schemaReady = true
+        state.schemaVersion = MYSQL_SCHEMA_VERSION
+      })
+      .finally(() => {
+        state.schemaPromise = null
+      })
+  }
+  await state.schemaPromise
+}
+
+type FileRow = RowDataPacket & {
+  id: number
+  kind: string
+  owner_key: string
+  filename: string
+  mime: string
+  file_data?: Buffer
+  source_url?: string
+  storage_path?: string
+  created_at: Date
+}
+
+async function fileBytesFromRow(row: Pick<FileRow, 'file_data' | 'storage_path'>) {
+  if (row.storage_path) return readStoredDocument(row.storage_path)
+  return Buffer.isBuffer(row.file_data) ? row.file_data : Buffer.from(row.file_data || [])
+}
+
+type AdminRow = RowDataPacket & {
+  id: number
+  username: string
+  email: string
+  name: string
+  password_hash: string
+  created_at: Date
+  updated_at: Date
+}
+
+type CatalogueRow = RowDataPacket & {
+  id: number
+  title: string
+  erp_product_id: string
+  category_id: string
+  product_name: string
+  file_id: number
+  download_count: number
+  created_at: Date
+  updated_at: Date
+}
+
+type ContentRow = RowDataPacket & {
+  erp_product_id: string
+  details: string
+  distributed_for: string
+  highlights?: string | null
+  updated_at: Date
+}
+
+function parseHighlights(value: unknown): string[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(String(value))
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
+  } catch {
+    return []
+  }
+}
+
+type DocRow = RowDataPacket & {
+  id: number
+  kind: string
+  slug: string
+  published: number
+  payload: string
+  created_at: Date
+  updated_at: Date
+}
+
+function mapAdmin(row: AdminRow): AdminUser {
+  return {
+    _id: String(row.id),
+    email: row.email,
+    name: row.name,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function mapCatalogue(row: CatalogueRow): Catalogue {
+  return {
+    _id: String(row.id),
+    title: row.title,
+    erpProductId: row.erp_product_id,
+    categoryId: row.category_id,
+    productName: row.product_name,
+    file: catalogueAsset(row.id),
+    downloadCount: Number(row.download_count) || 0,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+export async function mysqlSaveFile(input: {
+  kind: string
+  ownerKey?: string
+  filename: string
+  mime: string
+  buffer: Buffer
+  sourceUrl?: string
+}): Promise<MediaAsset> {
+  await ensureMysqlSchema()
+  const storeOnDisk = isDocumentKind(input.kind)
+  const storagePath = storeOnDisk
+    ? await writeStoredDocument({ kind: input.kind, filename: input.filename, buffer: input.buffer })
+    : ''
+  try {
+    const pool = await getPool()
+    const [result] = await pool.query<ResultSetHeader>(
+      'INSERT INTO accord_nx_files (kind, owner_key, filename, mime, file_data, source_url, storage_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        input.kind,
+        input.ownerKey || '',
+        input.filename || 'file',
+        input.mime || 'application/octet-stream',
+        storeOnDisk ? Buffer.alloc(0) : input.buffer,
+        input.sourceUrl || '',
+        storagePath,
+        new Date(),
+      ],
+    )
+    return fileAsset(result.insertId)
+  } catch (error) {
+    if (storagePath) await deleteStoredDocument(storagePath)
+    throw error
+  }
+}
+
+export async function mysqlGetFile(id: string | number) {
+  const fileId = mysqlId(id)
+  if (!fileId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<FileRow[]>(
+    'SELECT id, kind, owner_key, filename, mime, file_data, storage_path, created_at FROM accord_nx_files WHERE id = ? LIMIT 1',
+    [fileId],
+  )
+  const row = rows[0]
+  if (!row) return null
+  return {
+    id: row.id,
+    kind: row.kind,
+    ownerKey: row.owner_key,
+    filename: row.filename,
+    mime: row.mime,
+    data: await fileBytesFromRow(row),
+  }
+}
+
+type JobApplicationRow = RowDataPacket & {
+  id: number
+  full_name: string
+  email: string
+  phone: string
+  department: string
+  working_terms: string
+  notes: string
+  cv_file_id: number | null
+  cv_filename: string
+  status: string
+  created_at: Date | string
+}
+
+function mapJobApplication(row: JobApplicationRow): JobApplication {
+  return {
+    _id: String(row.id),
+    fullName: String(row.full_name || ''),
+    email: String(row.email || ''),
+    phone: String(row.phone || ''),
+    department: String(row.department || ''),
+    workingTerms: String(row.working_terms || ''),
+    notes: String(row.notes || ''),
+    cvFilename: String(row.cv_filename || ''),
+    cvFileId: mysqlId(row.cv_file_id),
+    status: row.status === 'reviewed' ? 'reviewed' : 'new',
+    createdAt: iso(row.created_at),
+  }
+}
+
+export async function mysqlCreateJobApplication(input: {
+  fullName: string
+  email: string
+  phone: string
+  department: string
+  workingTerms: string
+  notes?: string
+  cv: { buffer: Buffer; filename: string; mime: string }
+}) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const [result] = await pool.query<ResultSetHeader>(
+    `INSERT INTO accord_nx_job_applications
+      (full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, '', 'new', ?)`,
+    [input.fullName, input.email, input.phone, input.department, input.workingTerms, String(input.notes || '').trim(), now],
+  )
+  const id = String(result.insertId)
+  try {
+    const saved = await mysqlSaveFile({
+      kind: 'job-cv',
+      ownerKey: id,
+      filename: input.cv.filename,
+      mime: input.cv.mime,
+      buffer: input.cv.buffer,
+    })
+    const fileId = mysqlFileIdFromPublicId(saved.publicId)
+    await pool.query(
+      'UPDATE accord_nx_job_applications SET cv_file_id = ?, cv_filename = ? WHERE id = ?',
+      [fileId, input.cv.filename, result.insertId],
+    )
+  } catch (error) {
+    await pool.query('DELETE FROM accord_nx_job_applications WHERE id = ?', [result.insertId])
+    throw error
+  }
+  const created = await mysqlGetJobApplication(id)
+  if (!created) throw new Error('Could not save application')
+  return created
+}
+
+export async function mysqlListJobApplications(): Promise<JobApplication[]> {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<JobApplicationRow[]>(
+    `SELECT id, full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, created_at
+     FROM accord_nx_job_applications ORDER BY created_at DESC`,
+  )
+  return rows.map(mapJobApplication)
+}
+
+export async function mysqlGetJobApplication(id: string) {
+  const applicationId = mysqlId(id)
+  if (!applicationId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<JobApplicationRow[]>(
+    `SELECT id, full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, created_at
+     FROM accord_nx_job_applications WHERE id = ? LIMIT 1`,
+    [applicationId],
+  )
+  return rows[0] ? mapJobApplication(rows[0]) : null
+}
+
+export async function mysqlUpdateJobApplicationStatus(id: string, status: 'new' | 'reviewed') {
+  const existing = await mysqlGetJobApplication(id)
+  if (!existing) return null
+  const pool = await getPool()
+  await pool.query('UPDATE accord_nx_job_applications SET status = ? WHERE id = ?', [status, mysqlId(id)])
+  return mysqlGetJobApplication(id)
+}
+
+export async function mysqlDeleteJobApplication(id: string) {
+  const existing = await mysqlGetJobApplication(id)
+  if (!existing) return null
+  const pool = await getPool()
+  await pool.query('DELETE FROM accord_nx_job_applications WHERE id = ?', [mysqlId(id)])
+  if (existing.cvFileId) await mysqlDeleteFile(String(existing.cvFileId)).catch(() => false)
+  return existing
+}
+
+export async function mysqlGetJobApplicationCv(id: string) {
+  const existing = await mysqlGetJobApplication(id)
+  if (!existing?.cvFileId) return null
+  const file = await mysqlGetFile(existing.cvFileId)
+  if (!file || file.kind !== 'job-cv') return null
+  return { ...file, downloadName: existing.cvFilename || file.filename || 'cv.pdf' }
+}
+
+export async function mysqlDeleteFile(publicIdOrId: string) {
+  const id = mysqlFileIdFromPublicId(publicIdOrId) || mysqlId(publicIdOrId)
+  if (!id) return false
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<FileRow[]>(
+    'SELECT storage_path FROM accord_nx_files WHERE id = ? LIMIT 1',
+    [id],
+  )
+  const [result] = await pool.query<ResultSetHeader>('DELETE FROM accord_nx_files WHERE id = ?', [id])
+  if (rows[0]?.storage_path) await deleteStoredDocument(rows[0].storage_path)
+  return result.affectedRows > 0
+}
+
+export async function mysqlGetAdmin(login: string) {
+  const key = login.trim()
+  if (!key) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<AdminRow[]>(
+    'SELECT * FROM accord_nx_admins WHERE email = ? OR username = ? LIMIT 1',
+    [key.toLowerCase(), key],
+  )
+  return rows[0] ? mapAdmin(rows[0]) : null
+}
+
+export async function mysqlCountAdmins() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM accord_nx_admins')
+  return Number(rows[0]?.total) || 0
+}
+
+export async function mysqlCreateAdmin(input: { username?: string; email: string; name: string; passwordHash: string }) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const email = input.email.trim().toLowerCase()
+  const username = (input.username || email.split('@')[0] || 'admin').trim()
+  const [result] = await pool.query<ResultSetHeader>(
+    'INSERT INTO accord_nx_admins (username, email, name, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [username, email, input.name, input.passwordHash, now, now],
+  )
+  return {
+    _id: String(result.insertId),
+    email,
+    name: input.name,
+    passwordHash: input.passwordHash,
+    createdAt: now,
+    updatedAt: now,
+  } satisfies AdminUser
+}
+
+export async function mysqlUpdateAdminEmail(fromEmail: string, toEmail: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    'UPDATE accord_nx_admins SET email = ?, updated_at = ? WHERE email = ?',
+    [toEmail.trim().toLowerCase(), new Date(), fromEmail.trim().toLowerCase()],
+  )
+}
+
+export async function mysqlListCatalogues(erpProductId?: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = erpProductId
+    ? await pool.query<CatalogueRow[]>(
+        'SELECT id, title, erp_product_id, category_id, product_name, file_id, download_count, created_at, updated_at FROM accord_nx_catalogues WHERE erp_product_id = ? ORDER BY created_at DESC',
+        [erpProductId],
+      )
+    : await pool.query<CatalogueRow[]>(
+        'SELECT id, title, erp_product_id, category_id, product_name, file_id, download_count, created_at, updated_at FROM accord_nx_catalogues ORDER BY download_count DESC, created_at DESC',
+      )
+  return rows.map(mapCatalogue)
+}
+
+export async function mysqlGetCatalogue(id: string) {
+  const catalogueId = mysqlId(id)
+  if (!catalogueId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<CatalogueRow[]>(
+    'SELECT id, title, erp_product_id, category_id, product_name, file_id, download_count, created_at, updated_at FROM accord_nx_catalogues WHERE id = ? LIMIT 1',
+    [catalogueId],
+  )
+  return rows[0] ? mapCatalogue(rows[0]) : null
+}
+
+export async function mysqlCreateCatalogue(input: {
+  title: string
+  erpProductId: string
+  categoryId: string
+  productName: string
+  filename: string
+  mime: string
+  buffer: Buffer
+}) {
+  await ensureMysqlSchema()
+  const file = await mysqlSaveFile({
+    kind: 'catalogue',
+    ownerKey: input.erpProductId,
+    filename: input.filename,
+    mime: input.mime,
+    buffer: input.buffer,
+  })
+  const fileId = mysqlFileIdFromPublicId(file.publicId)
+  if (!fileId) throw new Error('Could not store catalogue file')
+  const pool = await getPool()
+  const now = new Date()
+  const [result] = await pool.query<ResultSetHeader>(
+    'INSERT INTO accord_nx_catalogues (title, erp_product_id, category_id, product_name, file_id, download_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)',
+    [input.title, input.erpProductId, input.categoryId, input.productName, fileId, now, now],
+  )
+  return mysqlGetCatalogue(String(result.insertId)) as Promise<Catalogue>
+}
+
+export async function mysqlDeleteCatalogue(id: string) {
+  const existing = await mysqlGetCatalogue(id)
+  if (!existing) return null
+  const catalogueId = mysqlId(id)
+  const pool = await getPool()
+  const [rows] = await pool.query<CatalogueRow[]>(
+    'SELECT file_id FROM accord_nx_catalogues WHERE id = ? LIMIT 1',
+    [catalogueId],
+  )
+  await pool.query('DELETE FROM accord_nx_catalogues WHERE id = ?', [catalogueId])
+  if (rows[0]?.file_id) await mysqlDeleteFile(String(rows[0].file_id))
+  return existing
+}
+
+export async function mysqlGetCatalogueFile(id: string) {
+  const catalogueId = mysqlId(id)
+  if (!catalogueId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<(CatalogueRow & FileRow)[]>(
+    `SELECT c.id, c.product_name, c.title, f.filename, f.mime, f.file_data, f.storage_path
+     FROM accord_nx_catalogues c
+     JOIN accord_nx_files f ON f.id = c.file_id
+     WHERE c.id = ? LIMIT 1`,
+    [catalogueId],
+  )
+  const row = rows[0]
+  if (!row) return null
+  return {
+    filename: row.filename || `${row.product_name || row.title || 'catalogue'}.pdf`,
+    mime: row.mime || 'application/pdf',
+    data: await fileBytesFromRow(row),
+  }
+}
+
+export async function mysqlRecordCatalogueDownload(input: {
+  catalogueId: string
+  productId?: string
+  ipHash: string
+  referrer: string
+}) {
+  const catalogue = await mysqlGetCatalogue(input.catalogueId)
+  if (!catalogue) return null
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    'INSERT INTO accord_nx_catalogue_downloads (catalogue_id, product_id, ip_hash, referrer, created_at) VALUES (?, ?, ?, ?, ?)',
+    [mysqlId(input.catalogueId), input.productId || catalogue.erpProductId, input.ipHash, input.referrer, now],
+  )
+  await pool.query(
+    'UPDATE accord_nx_catalogues SET download_count = download_count + 1, updated_at = ? WHERE id = ?',
+    [now, mysqlId(input.catalogueId)],
+  )
+  return mysqlGetCatalogue(input.catalogueId)
+}
+
+export async function mysqlCatalogueAnalytics() {
+  const catalogues = await mysqlListCatalogues()
+  const pool = await getPool()
+  const [recent] = await pool.query<RowDataPacket[]>(
+    'SELECT catalogue_id, product_id, created_at FROM accord_nx_catalogue_downloads ORDER BY created_at DESC LIMIT 40',
+  )
+  return {
+    total: catalogues.reduce((sum, item) => sum + item.downloadCount, 0),
+    catalogues,
+    recent: recent.map((row) => ({
+      catalogueId: String(row.catalogue_id),
+      productId: String(row.product_id || ''),
+      createdAt: iso(row.created_at as Date),
+    })) satisfies Pick<CatalogueDownload, 'catalogueId' | 'productId' | 'createdAt'>[],
+  }
+}
+
+async function mysqlProductImages(erpProductId?: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const kinds = ['product-image', 'product-installation']
+  const [rows] = erpProductId
+    ? await pool.query<FileRow[]>(
+        'SELECT id, kind, owner_key, filename, mime, created_at FROM accord_nx_files WHERE kind IN (?, ?) AND owner_key = ? ORDER BY id ASC',
+        [...kinds, erpProductId],
+      )
+    : await pool.query<FileRow[]>(
+        'SELECT id, kind, owner_key, filename, mime, created_at FROM accord_nx_files WHERE kind IN (?, ?) ORDER BY id ASC',
+        kinds,
+      )
+  return rows
+}
+
+export async function mysqlGetProductContentMap() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [contentRows] = await pool.query<ContentRow[]>('SELECT * FROM accord_nx_product_content')
+  const images = await mysqlProductImages()
+  const map = new Map<string, ProductContent>()
+  for (const row of contentRows) {
+    map.set(row.erp_product_id, {
+      erpProductId: row.erp_product_id,
+      details: row.details || '',
+      distributedFor: row.distributed_for || '',
+      highlights: parseHighlights(row.highlights),
+      images: [],
+      updatedAt: row.updated_at,
+    })
+  }
+  for (const image of images) {
+    const current = map.get(image.owner_key) || {
+      erpProductId: image.owner_key,
+      details: '',
+      images: [],
+      updatedAt: image.created_at,
+    }
+    current.images.push(fileAsset(image.id, { installation: image.kind === 'product-installation' }))
+    map.set(image.owner_key, current)
+  }
+  return map
+}
+
+export async function mysqlProductHasDetails(erpProductId: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT details FROM accord_nx_product_content WHERE erp_product_id = ? LIMIT 1',
+    [erpProductId],
+  )
+  return Boolean(String(rows[0]?.details || '').trim())
+}
+
+export async function mysqlGetProductContent(erpProductId: string): Promise<ProductContent> {
+  const map = await mysqlGetProductContentMap()
+  return map.get(erpProductId) || { erpProductId, details: '', images: [], updatedAt: new Date() }
+}
+
+export async function mysqlAddProductImage(erpProductId: string, buffer: Buffer, filename: string, mime: string, installation = false) {
+  await mysqlSaveFile({
+    kind: installation ? 'product-installation' : 'product-image',
+    ownerKey: erpProductId,
+    filename,
+    mime,
+    buffer,
+  })
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    `INSERT INTO accord_nx_product_content (erp_product_id, details, distributed_for, updated_at)
+     VALUES (?, '', '', ?)
+     ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at)`,
+    [erpProductId, new Date()],
+  )
+  return mysqlGetProductContent(erpProductId)
+}
+
+export async function mysqlRemoveProductImage(erpProductId: string, publicId: string) {
+  const fileId = mysqlFileIdFromPublicId(publicId)
+  if (!fileId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<FileRow[]>(
+    'SELECT id FROM accord_nx_files WHERE id = ? AND kind IN (?, ?) AND owner_key = ? LIMIT 1',
+    [fileId, 'product-image', 'product-installation', erpProductId],
+  )
+  if (!rows[0]) return null
+  const image = fileAsset(fileId)
+  await mysqlDeleteFile(String(fileId))
+  return image
+}
+
+export async function mysqlSetProductImageInstallation(erpProductId: string, publicId: string, installation: boolean) {
+  const fileId = mysqlFileIdFromPublicId(publicId)
+  if (!fileId) return mysqlGetProductContent(erpProductId)
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    'UPDATE accord_nx_files SET kind = ? WHERE id = ? AND owner_key = ? AND kind IN (?, ?)',
+    [installation ? 'product-installation' : 'product-image', fileId, erpProductId, 'product-image', 'product-installation'],
+  )
+  return mysqlGetProductContent(erpProductId)
+}
+
+export async function mysqlUpdateProductDetails(erpProductId: string, details: string, extra?: { distributedFor?: string; highlights?: string[] }) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const highlights = Array.isArray(extra?.highlights)
+    ? extra.highlights.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
+    : undefined
+  const updates = ['details = VALUES(details)', 'updated_at = VALUES(updated_at)']
+  if (extra?.distributedFor !== undefined) updates.push('distributed_for = VALUES(distributed_for)')
+  if (highlights) updates.push('highlights = VALUES(highlights)')
+  await pool.query(
+    `INSERT INTO accord_nx_product_content (erp_product_id, details, distributed_for, highlights, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE ${updates.join(', ')}`,
+    [
+      erpProductId,
+      details,
+      extra?.distributedFor || '',
+      highlights ? JSON.stringify(highlights) : null,
+      now,
+    ],
+  )
+  return mysqlGetProductContent(erpProductId)
+}
+
+export async function mysqlGetSiteSettings(): Promise<SiteSettings> {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM accord_nx_site_settings WHERE id = ? LIMIT 1', ['default'])
+  if (rows[0]) {
+    return { _id: 'default', showPrices: Boolean(rows[0].show_prices), updatedAt: rows[0].updated_at as Date }
+  }
+  const defaults: SiteSettings = { _id: 'default', showPrices: true, updatedAt: new Date() }
+  await pool.query(
+    'INSERT INTO accord_nx_site_settings (id, show_prices, updated_at) VALUES (?, ?, ?)',
+    ['default', 1, defaults.updatedAt],
+  )
+  return defaults
+}
+
+export async function mysqlUpdateSiteSettings(updates: Partial<Pick<SiteSettings, 'showPrices'>>) {
+  const current = await mysqlGetSiteSettings()
+  const next = { ...current, ...updates, updatedAt: new Date() }
+  const pool = await getPool()
+  await pool.query(
+    'INSERT INTO accord_nx_site_settings (id, show_prices, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE show_prices = VALUES(show_prices), updated_at = VALUES(updated_at)',
+    ['default', next.showPrices ? 1 : 0, next.updatedAt],
+  )
+  return next
+}
+
+function parseDoc<T extends { _id: string }>(row: DocRow): T {
+  const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload
+  return {
+    ...payload,
+    _id: String(row.id),
+    slug: row.slug || payload.slug || '',
+    published: Boolean(row.published),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  } as T
+}
+
+export async function mysqlListDocs<T extends { _id: string }>(kind: string, publishedOnly = false) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = publishedOnly
+    ? await pool.query<DocRow[]>(
+        'SELECT * FROM accord_nx_docs WHERE kind = ? AND published = 1 ORDER BY created_at DESC',
+        [kind],
+      )
+    : await pool.query<DocRow[]>('SELECT * FROM accord_nx_docs WHERE kind = ? ORDER BY created_at DESC', [kind])
+  return rows.map((row) => parseDoc<T>(row))
+}
+
+export async function mysqlGetDoc<T extends { _id: string }>(kind: string, id: string) {
+  const docId = mysqlId(id)
+  if (!docId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<DocRow[]>('SELECT * FROM accord_nx_docs WHERE kind = ? AND id = ? LIMIT 1', [kind, docId])
+  return rows[0] ? parseDoc<T>(rows[0]) : null
+}
+
+export async function mysqlGetDocBySlug<T extends { _id: string }>(kind: string, slug: string) {
+  if (!slug) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<DocRow[]>('SELECT * FROM accord_nx_docs WHERE kind = ? AND slug = ? LIMIT 1', [kind, slug])
+  return rows[0] ? parseDoc<T>(rows[0]) : null
+}
+
+export async function mysqlGetDocByPayloadFrom<T extends { _id: string; from?: string }>(kind: string, from: string) {
+  if (!from) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<DocRow[]>(
+    `SELECT id, kind, slug, published, payload, created_at, updated_at
+     FROM accord_nx_docs
+     WHERE kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.from')) = ?
+     LIMIT 1`,
+    [kind, from],
+  )
+  return rows[0] ? parseDoc<T>(rows[0]) : null
+}
+
+export async function mysqlUniqueSlug(kind: string, base: string, excludeId?: string) {
+  const root = base || 'item'
+  let slug = root
+  let n = 2
+  while (true) {
+    const existing = await mysqlGetDocBySlug(kind, slug)
+    if (!existing || (excludeId && existing._id === excludeId)) return slug
+    slug = `${root}-${n}`
+    n += 1
+  }
+}
+
+export async function mysqlInsertDoc<T extends { _id: string; published?: boolean; slug?: string }>(
+  kind: string,
+  payload: Omit<T, '_id' | 'createdAt' | 'updatedAt'>,
+) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const [result] = await pool.query<ResultSetHeader>(
+    'INSERT INTO accord_nx_docs (kind, slug, published, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [kind, payload.slug || '', payload.published === false ? 0 : 1, JSON.stringify(payload), now, now],
+  )
+  return mysqlGetDoc<T>(kind, String(result.insertId)) as Promise<T>
+}
+
+export async function mysqlUpdateDoc<T extends { _id: string; published?: boolean; slug?: string }>(
+  kind: string,
+  id: string,
+  payload: Partial<T>,
+) {
+  const existing = await mysqlGetDoc<T>(kind, id)
+  if (!existing) return null
+  const next = { ...existing, ...payload, _id: existing._id }
+  const pool = await getPool()
+  await pool.query(
+    'UPDATE accord_nx_docs SET slug = ?, published = ?, payload = ?, updated_at = ? WHERE kind = ? AND id = ?',
+    [next.slug || '', next.published === false ? 0 : 1, JSON.stringify(next), new Date(), kind, mysqlId(id)],
+  )
+  return mysqlGetDoc<T>(kind, id)
+}
+
+export async function mysqlDeleteDoc<T extends { _id: string }>(kind: string, id: string) {
+  const existing = await mysqlGetDoc<T>(kind, id)
+  if (!existing) return null
+  const pool = await getPool()
+  await pool.query('DELETE FROM accord_nx_docs WHERE kind = ? AND id = ?', [kind, mysqlId(id)])
+  return existing
+}
+
+export async function mysqlListProfilePages(publishedOnly = false): Promise<CompanyProfilePage[]> {
+  const rows = await mysqlListDocs<CompanyProfilePage>('company-profile', publishedOnly)
+  return rows.sort((a, b) => (a.order || 0) - (b.order || 0) || a.createdAt.localeCompare(b.createdAt))
+}
+
+export async function mysqlRecordProductClick(input: {
+  erpProductId: string
+  productName: string
+  categoryId: string
+  categoryName: string
+  fromProductId?: string
+}) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    `INSERT INTO accord_nx_product_performance
+      (erp_product_id, product_name, category_id, category_name, clicks, shares, last_clicked_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+      clicks = clicks + 1,
+      product_name = VALUES(product_name),
+      category_id = VALUES(category_id),
+      category_name = VALUES(category_name),
+      last_clicked_at = VALUES(last_clicked_at),
+      updated_at = VALUES(updated_at)`,
+    [input.erpProductId, input.productName, input.categoryId, input.categoryName, now, now, now],
+  )
+  if (input.fromProductId && input.fromProductId !== input.erpProductId) {
+    await pool.query(
+      `INSERT INTO accord_nx_product_journeys (from_product_id, to_product_id, journey_count, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?)
+       ON DUPLICATE KEY UPDATE journey_count = journey_count + 1, updated_at = VALUES(updated_at)`,
+      [input.fromProductId, input.erpProductId, now, now],
+    )
+  }
+}
+
+export async function mysqlRecordProductShare(input: {
+  erpProductId: string
+  productName: string
+  categoryId: string
+  categoryName: string
+}) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    `INSERT INTO accord_nx_product_performance
+      (erp_product_id, product_name, category_id, category_name, clicks, shares, last_shared_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 0, 1, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+      shares = shares + 1,
+      product_name = VALUES(product_name),
+      category_id = VALUES(category_id),
+      category_name = VALUES(category_name),
+      last_shared_at = VALUES(last_shared_at),
+      updated_at = VALUES(updated_at)`,
+    [input.erpProductId, input.productName, input.categoryId, input.categoryName, now, now, now],
+  )
+}
+
+export async function mysqlRecordProductCart(input: {
+  erpProductId: string
+  productName: string
+  categoryId: string
+  categoryName: string
+}) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    `INSERT INTO accord_nx_product_performance
+      (erp_product_id, product_name, category_id, category_name, clicks, shares, carts, last_carted_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 0, 0, 1, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+      carts = carts + 1,
+      product_name = VALUES(product_name),
+      category_id = VALUES(category_id),
+      category_name = VALUES(category_name),
+      last_carted_at = VALUES(last_carted_at),
+      updated_at = VALUES(updated_at)`,
+    [input.erpProductId, input.productName, input.categoryId, input.categoryName, now, now, now],
+  )
+}
+
+export async function mysqlGetProductMetricsMap() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT erp_product_id, clicks, shares, carts FROM accord_nx_product_performance',
+  )
+  const map = new Map<string, { clicks: number; shares: number; carts: number }>()
+  for (const row of rows) {
+    map.set(String(row.erp_product_id), {
+      clicks: Number(row.clicks) || 0,
+      shares: Number(row.shares) || 0,
+      carts: Number(row.carts) || 0,
+    })
+  }
+  return map
+}
+
+export async function mysqlGetRelatedProductIds(fromProductId: string, limit = 8) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT to_product_id FROM accord_nx_product_journeys WHERE from_product_id = ? ORDER BY journey_count DESC LIMIT ' + Math.max(1, Math.min(50, Number(limit) || 8)),
+    [fromProductId],
+  )
+  return rows.map((row) => String(row.to_product_id))
+}
+
+export async function mysqlGetCategoryPerformance() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT category_id AS categoryId, MAX(category_name) AS categoryName,
+            SUM(clicks) AS clicks, SUM(shares) AS shares, SUM(carts) AS carts, COUNT(*) AS productsClicked
+     FROM accord_nx_product_performance
+     GROUP BY category_id
+     ORDER BY clicks DESC`,
+  )
+  return rows.map((row) => ({
+    categoryId: String(row.categoryId || ''),
+    categoryName: String(row.categoryName || ''),
+    clicks: Number(row.clicks) || 0,
+    shares: Number(row.shares) || 0,
+    carts: Number(row.carts) || 0,
+    productsClicked: Number(row.productsClicked) || 0,
+  }))
+}
+
+type CatalogProductRow = RowDataPacket & {
+  id: string
+  slug: string
+  name: string
+  product_type: string
+  description: string
+  details: string
+  price: number | string
+  compare_at: number | string | null
+  manufacturer: string
+  category_id: string
+  category_name: string
+  featured: number
+  in_stock: number
+  hidden?: number
+  checkout?: number
+  created_on: string
+  seo?: string | null
+}
+
+const CATALOG_PRODUCT_COLUMNS = `id, slug, name, product_type, description, details, price, compare_at, manufacturer,
+              category_id, category_name, featured, in_stock, hidden, checkout, created_on, seo`
+
+function mapCatalogProductRow(row: CatalogProductRow): CatalogProduct {
+  const price = Number(row.price) || 0
+  const compareAt = Number(row.compare_at)
+  return {
+    id: String(row.id),
+    name: row.name,
+    description: row.description || '',
+    details: row.details || '',
+    categoryId: row.category_id,
+    categoryName: row.category_name,
+    price,
+    compareAt: Number.isFinite(compareAt) && compareAt > 0 ? compareAt : undefined,
+    unit: 'unit',
+    stock: 0,
+    inStock: Boolean(row.in_stock),
+    image: null,
+    images: [],
+    imageAssets: [],
+    manufacturer: row.manufacturer || undefined,
+    clicks: 0,
+    shares: 0,
+    carts: 0,
+    slug: row.slug,
+    shopUrl: `/product/${row.slug}`,
+    productType: row.product_type || null,
+    featured: Boolean(row.featured),
+    hidden: Boolean(row.hidden),
+    checkout: Boolean(row.checkout),
+    createdOn: row.created_on || undefined,
+    seo: row.seo ? parseSeoJson(row.seo) : undefined,
+  }
+}
+
+function parseSeoJson(value: string) {
+  try {
+    const parsed = JSON.parse(value)
+    if (!parsed || typeof parsed !== 'object') return undefined
+    return {
+      focusKeyword: String(parsed.focusKeyword || ''),
+      seoTitle: String(parsed.seoTitle || ''),
+      seoDescription: String(parsed.seoDescription || ''),
+      seoSlug: String(parsed.seoSlug || ''),
+      seoKeywords: String(parsed.seoKeywords || ''),
+      imageAlt: String(parsed.imageAlt || ''),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+export async function mysqlCountCatalogProducts() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM accord_nx_products')
+  return Number(rows[0]?.total) || 0
+}
+
+export async function mysqlCatalogProductIds() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT id FROM accord_nx_products')
+  return new Set(rows.map((row) => String(row.id)))
+}
+
+export async function mysqlListSourceUrls(ownerKey: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<FileRow[]>(
+    'SELECT source_url FROM accord_nx_files WHERE owner_key = ? AND source_url <> ?',
+    [ownerKey, ''],
+  )
+  return new Set(rows.map((row) => row.source_url).filter(Boolean) as string[])
+}
+
+export async function mysqlUpsertCatalogProduct(product: CatalogProduct) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    `INSERT INTO accord_nx_products
+      (id, slug, name, product_type, description, details, price, compare_at, manufacturer, category_id, category_name, featured, in_stock, created_on, imported_at, updated_at, seo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+      slug = VALUES(slug),
+      name = VALUES(name),
+      product_type = VALUES(product_type),
+      description = VALUES(description),
+      details = IF(details = '' OR details IS NULL, VALUES(details), details),
+      price = VALUES(price),
+      compare_at = VALUES(compare_at),
+      manufacturer = VALUES(manufacturer),
+      category_id = VALUES(category_id),
+      category_name = VALUES(category_name),
+      featured = VALUES(featured),
+      in_stock = VALUES(in_stock),
+      created_on = VALUES(created_on),
+      seo = VALUES(seo),
+      updated_at = VALUES(updated_at)`,
+    [
+      product.id,
+      product.slug,
+      product.name,
+      product.productType || '',
+      product.description || '',
+      product.details || '',
+      product.price || 0,
+      product.compareAt || null,
+      product.manufacturer || '',
+      product.categoryId,
+      product.categoryName,
+      product.featured ? 1 : 0,
+      product.inStock ? 1 : 0,
+      product.createdOn || '',
+      now,
+      now,
+      product.seo ? JSON.stringify(product.seo) : null,
+    ],
+  )
+}
+
+function mapCategoryRow(row: RowDataPacket): CatalogCategory {
+  return {
+    _id: String(row.id),
+    name: String(row.name || row.id),
+    slug: String(row.id),
+    count: 0,
+    description: String(row.description || ''),
+  }
+}
+
+export async function mysqlListCategories(): Promise<CatalogCategory[]> {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, name, description FROM accord_nx_categories ORDER BY name ASC',
+  )
+  return rows.map(mapCategoryRow)
+}
+
+export async function mysqlGetCategory(id: string) {
+  const slug = String(id || '').trim()
+  if (!slug) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, name, description FROM accord_nx_categories WHERE id = ? LIMIT 1',
+    [slug],
+  )
+  return rows[0] ? mapCategoryRow(rows[0]) : null
+}
+
+export async function mysqlCreateCategory(input: { name: string; description?: string }) {
+  const name = String(input.name || '').trim()
+  const slug = publicCategorySlug(name)
+  if (!name || !slug) throw new Error('Enter a category name')
+  const existing = await mysqlGetCategory(slug)
+  if (existing) throw new Error('That category already exists')
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    'INSERT INTO accord_nx_categories (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    [slug, name, String(input.description || '').trim(), now, now],
+  )
+  return mysqlGetCategory(slug) as Promise<CatalogCategory>
+}
+
+export async function mysqlEnsureCategory(input: { name: string; slug?: string; description?: string }) {
+  const name = String(input.name || '').trim()
+  const slug = input.slug || publicCategorySlug(name)
+  if (!name || !slug) throw new Error('Enter a category name')
+  const existing = await mysqlGetCategory(slug)
+  if (existing) return existing
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    'INSERT INTO accord_nx_categories (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), updated_at = VALUES(updated_at)',
+    [slug, name, String(input.description || '').trim(), now, now],
+  )
+  return (await mysqlGetCategory(slug)) as CatalogCategory
+}
+
+async function mysqlUniqueProductValue(column: 'id' | 'slug', base: string) {
+  const root = (base || 'product').slice(0, 60)
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  let value = root
+  let n = 2
+  while (n < 50) {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT ${column} FROM accord_nx_products WHERE ${column} = ? LIMIT 1`,
+      [value],
+    )
+    if (!rows[0]) return value
+    value = `${root}-${n}`.slice(0, 64)
+    n += 1
+  }
+  return `${root}-${Date.now().toString(36)}`.slice(0, 64)
+}
+
+export async function mysqlGetCatalogProduct(id: string) {
+  const productId = String(id || '').trim()
+  if (!productId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<CatalogProductRow[]>(
+    `SELECT ${CATALOG_PRODUCT_COLUMNS}
+     FROM accord_nx_products WHERE id = ? LIMIT 1`,
+    [productId],
+  )
+  return rows[0] ? mapCatalogProductRow(rows[0]) : null
+}
+
+export async function mysqlFindCatalogProductByName(name: string, categoryName?: string) {
+  const title = String(name || '').trim()
+  if (!title) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const category = String(categoryName || '').trim()
+  const [rows] = category
+    ? await pool.query<CatalogProductRow[]>(
+        `SELECT ${CATALOG_PRODUCT_COLUMNS}
+         FROM accord_nx_products WHERE LOWER(name) = LOWER(?) AND LOWER(category_name) = LOWER(?) LIMIT 1`,
+        [title, category],
+      )
+    : await pool.query<CatalogProductRow[]>(
+        `SELECT ${CATALOG_PRODUCT_COLUMNS}
+         FROM accord_nx_products WHERE LOWER(name) = LOWER(?) LIMIT 1`,
+        [title],
+      )
+  return rows[0] ? mapCatalogProductRow(rows[0]) : null
+}
+
+export async function mysqlUpdateCatalogProduct(
+  id: string,
+  updates: {
+    name?: string
+    description?: string
+    details?: string
+    categoryId?: string
+    categoryName?: string
+    price?: number
+    hidden?: boolean
+    checkout?: boolean
+  },
+) {
+  const existing = await mysqlGetCatalogProduct(id)
+  if (!existing) throw new Error('Product not found')
+  const name = updates.name !== undefined ? String(updates.name).trim() : existing.name
+  if (!name) throw new Error('Enter a product name')
+  const description = updates.description !== undefined ? String(updates.description) : existing.description
+  const details = updates.details !== undefined ? String(updates.details) : existing.details
+  const categoryId = updates.categoryId || existing.categoryId
+  const categoryName = updates.categoryName || existing.categoryName
+  const price = updates.price !== undefined ? Number(updates.price) || 0 : existing.price
+  const hidden = updates.hidden !== undefined ? Boolean(updates.hidden) : Boolean(existing.hidden)
+  const checkout = updates.checkout !== undefined ? Boolean(updates.checkout) : Boolean(existing.checkout)
+  if (checkout && price <= 0) throw new Error('Set a price before enabling checkout')
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    `UPDATE accord_nx_products
+     SET name = ?, description = ?, details = ?, price = ?, category_id = ?, category_name = ?, hidden = ?, checkout = ?, updated_at = ?
+     WHERE id = ?`,
+    [name, description, details, price, categoryId, categoryName, hidden ? 1 : 0, checkout ? 1 : 0, new Date(), id],
+  )
+  return mysqlGetCatalogProduct(id)
+}
+
+export async function mysqlSetProductCheckout(id: string, checkout: boolean) {
+  return mysqlUpdateCatalogProduct(id, { checkout: Boolean(checkout) })
+}
+
+export async function mysqlReplaceProductCheckout(productIds: string[]) {
+  const ids = [...new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean))]
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query('UPDATE accord_nx_products SET checkout = 0, updated_at = ? WHERE price > 0 AND hidden = 0', [now])
+  if (!ids.length) return mysqlListCatalogProducts()
+  const placeholders = ids.map(() => '?').join(', ')
+  await pool.query(
+    `UPDATE accord_nx_products SET checkout = 1, updated_at = ? WHERE price > 0 AND id IN (${placeholders})`,
+    [now, ...ids],
+  )
+  return mysqlListCatalogProducts()
+}
+
+export async function mysqlCreateCatalogProduct(input: {
+  name: string
+  description?: string
+  details?: string
+  categoryId: string
+  categoryName: string
+  manufacturer?: string
+  price?: number
+  inStock?: boolean
+  featured?: boolean
+  seo?: CatalogProduct['seo']
+  slug?: string
+}) {
+  const name = String(input.name || '').trim()
+  if (!name) throw new Error('Enter a product name')
+  const slugBase = slugifyName(input.slug || input.seo?.seoSlug || name) || 'product'
+  const slug = await mysqlUniqueProductValue('slug', slugBase)
+  const id = await mysqlUniqueProductValue('id', `m-${slugBase}`)
+  const product: CatalogProduct = {
+    id,
+    name,
+    description: String(input.description || '').trim(),
+    details: String(input.details || input.description || '').trim(),
+    categoryId: input.categoryId,
+    categoryName: input.categoryName,
+    price: Number(input.price) || 0,
+    unit: 'unit',
+    stock: 0,
+    inStock: input.inStock !== false,
+    image: null,
+    images: [],
+    imageAssets: [],
+    manufacturer: String(input.manufacturer || '').trim() || undefined,
+    clicks: 0,
+    shares: 0,
+    carts: 0,
+    slug,
+    shopUrl: `/product/${slug}`,
+    featured: Boolean(input.featured),
+    hidden: false,
+    checkout: false,
+    createdOn: new Date().toISOString(),
+    seo: input.seo,
+  }
+  await mysqlUpsertCatalogProduct(product)
+  return product
+}
+
+export async function mysqlDeleteCatalogProduct(id: string) {
+  const existing = await mysqlGetCatalogProduct(id)
+  if (!existing) return null
+  const catalogues = await mysqlListCatalogues(id)
+  for (const catalogue of catalogues) {
+    await mysqlDeleteCatalogue(catalogue._id)
+  }
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    `DELETE FROM accord_nx_files WHERE owner_key = ? AND kind IN ('product-image', 'product-installation')`,
+    [id],
+  )
+  await pool.query('DELETE FROM accord_nx_product_content WHERE erp_product_id = ?', [id])
+  await pool.query('DELETE FROM accord_nx_products WHERE id = ?', [id])
+  return existing
+}
+
+export async function mysqlListCatalogProducts(): Promise<CatalogProduct[]> {
+  return withMysqlRetry(async () => {
+    await ensureMysqlSchema()
+    const pool = await getPool()
+    const [rows] = await pool.query<CatalogProductRow[]>(
+      `SELECT ${CATALOG_PRODUCT_COLUMNS}
+       FROM accord_nx_products ORDER BY name ASC`,
+    )
+    return rows.map(mapCatalogProductRow)
+  })
+}
+
+export async function mysqlCatalogImportStats() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [productRows] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) AS total FROM accord_nx_products')
+  const [imageRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM accord_nx_files
+     WHERE kind IN ('product-image', 'product-installation') AND source_url <> ''`,
+  )
+  const [fileRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM accord_nx_files WHERE kind IN ('product-image', 'product-installation')`,
+  )
+  return {
+    products: Number(productRows[0]?.total) || 0,
+    importedImages: Number(imageRows[0]?.total) || 0,
+    storedImages: Number(fileRows[0]?.total) || 0,
+  }
+}
+
+function parseCheckoutItems(value: unknown): CheckoutItem[] {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((row) => ({
+      productId: String(row?.productId || ''),
+      name: String(row?.name || ''),
+      quantity: Math.max(1, Number(row?.quantity) || 1),
+      unitPrice: Math.max(0, Number(row?.unitPrice) || 0),
+    })).filter((row) => row.productId && row.name)
+  } catch {
+    return []
+  }
+}
+
+function checkoutReference() {
+  const stamp = Date.now().toString(36).toUpperCase().slice(-7)
+  const rand = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4)
+  return `AMS${stamp}${rand}`.slice(0, 12)
+}
+
+function mapCheckoutOrder(row: RowDataPacket): CheckoutOrder {
+  return {
+    id: String(row.id),
+    reference: String(row.reference || ''),
+    status: parseCheckoutStatus(row.status),
+    customerName: String(row.customer_name || ''),
+    phone: String(row.phone || ''),
+    email: String(row.email || ''),
+    location: String(row.location || ''),
+    customerId: row.customer_id ? String(row.customer_id) : '',
+    amount: Number(row.amount) || 0,
+    items: parseCheckoutItems(row.items_json),
+    mpesaReceipt: String(row.mpesa_receipt || ''),
+    mpesaResult: String(row.mpesa_result || ''),
+    mpesaCheckoutId: String(row.mpesa_checkout_id || ''),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+export async function mysqlCreateCheckoutOrder(input: {
+  customerName: string
+  phone: string
+  email?: string
+  location?: string
+  amount: number
+  items: CheckoutItem[]
+  customerId?: string
+}) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const reference = checkoutReference()
+  const customerId = Number(input.customerId) || null
+  const [result] = await pool.query<ResultSetHeader>(
+    `INSERT INTO accord_nx_orders
+      (reference, status, customer_name, phone, email, location, amount, items_json, customer_id, created_at, updated_at)
+     VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      reference,
+      input.customerName,
+      input.phone,
+      String(input.email || '').slice(0, 191),
+      String(input.location || '').slice(0, 191),
+      Math.max(0, Math.round(input.amount)),
+      JSON.stringify(input.items),
+      customerId,
+      now,
+      now,
+    ],
+  )
+  const order = await mysqlGetCheckoutOrder(String(result.insertId))
+  if (!order) throw new Error('Could not create order')
+  return order
+}
+
+export async function mysqlGetCheckoutOrder(id: string) {
+  const orderId = String(id || '').trim()
+  if (!orderId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM accord_nx_orders WHERE id = ? OR reference = ? LIMIT 1',
+    [orderId, orderId],
+  )
+  return rows[0] ? mapCheckoutOrder(rows[0]) : null
+}
+
+export async function mysqlGetCheckoutOrderByCheckoutId(checkoutRequestId: string) {
+  const requestId = String(checkoutRequestId || '').trim()
+  if (!requestId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM accord_nx_orders WHERE mpesa_checkout_id = ? LIMIT 1',
+    [requestId],
+  )
+  return rows[0] ? mapCheckoutOrder(rows[0]) : null
+}
+
+export async function mysqlUpdateCheckoutOrder(id: string, updates: {
+  status?: CheckoutStatus
+  mpesaCheckoutId?: string
+  mpesaMerchantId?: string
+  mpesaReceipt?: string
+  mpesaResult?: string
+}) {
+  const existing = await mysqlGetCheckoutOrder(id)
+  if (!existing) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    `UPDATE accord_nx_orders
+     SET status = ?, mpesa_checkout_id = ?, mpesa_merchant_id = IF(? <> '', ?, mpesa_merchant_id),
+         mpesa_receipt = IF(? <> '', ?, mpesa_receipt), mpesa_result = ?, updated_at = ?
+     WHERE id = ?`,
+    [
+      updates.status || existing.status,
+      updates.mpesaCheckoutId || existing.mpesaCheckoutId || '',
+      updates.mpesaMerchantId || '',
+      updates.mpesaMerchantId || '',
+      updates.mpesaReceipt || '',
+      updates.mpesaReceipt || '',
+      String(updates.mpesaResult ?? existing.mpesaResult).slice(0, 255),
+      new Date(),
+      existing.id,
+    ],
+  )
+  return mysqlGetCheckoutOrder(existing.id)
+}
+
+export async function mysqlListCheckoutOrders() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM accord_nx_orders ORDER BY created_at DESC LIMIT 200',
+  )
+  return rows.map(mapCheckoutOrder)
+}
+
+export async function mysqlListCustomerOrders(input: { customerId?: string; phone?: string }) {
+  const customerId = Number(input.customerId) || 0
+  const phone = String(input.phone || '').trim()
+  if (!customerId && !phone) return []
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const filters: string[] = []
+  const params: Array<string | number> = []
+  if (customerId) {
+    filters.push('customer_id = ?')
+    params.push(customerId)
+  }
+  if (phone) {
+    filters.push('phone = ?')
+    params.push(phone)
+  }
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT * FROM accord_nx_orders WHERE ${filters.join(' OR ')} ORDER BY created_at DESC LIMIT 100`,
+    params,
+  )
+  return rows.map(mapCheckoutOrder)
+}
+
+function mapCustomer(row: RowDataPacket): CustomerAccount {
+  return {
+    id: String(row.id),
+    name: String(row.name || ''),
+    facilityName: String(row.facility_name || ''),
+    phone: String(row.phone || ''),
+    location: String(row.location || ''),
+    createdAt: iso(row.created_at),
+    lastSeenAt: iso(row.last_seen_at),
+  }
+}
+
+export async function mysqlGetCustomerById(id: string) {
+  const customerId = Number(id) || 0
+  if (!customerId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM accord_nx_customers WHERE id = ? LIMIT 1',
+    [customerId],
+  )
+  return rows[0] ? mapCustomer(rows[0]) : null
+}
+
+export async function mysqlGetCustomerByPhone(phone: string) {
+  const normalized = String(phone || '').trim()
+  if (!normalized) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM accord_nx_customers WHERE phone = ? LIMIT 1',
+    [normalized],
+  )
+  return rows[0] ? mapCustomer(rows[0]) : null
+}
+
+export async function mysqlCreateCustomer(input: {
+  name: string
+  facilityName: string
+  phone: string
+  location: string
+}) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  try {
+    const [result] = await pool.query<ResultSetHeader>(
+      `INSERT INTO accord_nx_customers
+        (name, facility_name, phone, location, created_at, updated_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [input.name, input.facilityName, input.phone, input.location, now, now, now],
+    )
+    const customer = await mysqlGetCustomerById(String(result.insertId))
+    if (!customer) throw new Error('Could not create account')
+    await mysqlLinkOrdersToCustomer(customer.id, customer.phone)
+    return customer
+  } catch (error) {
+    const code = (error as { code?: string }).code
+    if (code === 'ER_DUP_ENTRY') throw new Error('An account with this phone number already exists. Sign in instead.')
+    throw error
+  }
+}
+
+export async function mysqlTouchCustomer(id: string) {
+  const customerId = Number(id) || 0
+  if (!customerId) return
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    'UPDATE accord_nx_customers SET last_seen_at = ?, updated_at = updated_at WHERE id = ?',
+    [new Date(), customerId],
+  )
+}
+
+export async function mysqlLinkOrdersToCustomer(customerId: string, phone: string) {
+  const id = Number(customerId) || 0
+  const normalized = String(phone || '').trim()
+  if (!id || !normalized) return
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    'UPDATE accord_nx_orders SET customer_id = ? WHERE phone = ? AND (customer_id IS NULL OR customer_id = 0)',
+    [id, normalized],
+  )
+}
+
+export async function mysqlRecordCustomerInterest(input: {
+  customerId: string
+  productId: string
+  productName: string
+  categoryId?: string
+  categoryName?: string
+  kind: 'click' | 'cart'
+}) {
+  const customerId = Number(input.customerId) || 0
+  const productId = String(input.productId || '').trim().slice(0, 80)
+  if (!customerId || !productId) return
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const name = String(input.productName || '').trim().slice(0, 191) || productId
+  const categoryId = String(input.categoryId || '').trim().slice(0, 80)
+  const categoryName = String(input.categoryName || '').trim().slice(0, 191)
+  if (input.kind === 'cart') {
+    await pool.query(
+      `INSERT INTO accord_nx_customer_interest
+        (customer_id, product_id, product_name, category_id, category_name, clicks, carts, last_carted_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+        carts = carts + 1,
+        product_name = VALUES(product_name),
+        category_id = IF(VALUES(category_id) <> '', VALUES(category_id), category_id),
+        category_name = IF(VALUES(category_name) <> '', VALUES(category_name), category_name),
+        last_carted_at = VALUES(last_carted_at),
+        updated_at = VALUES(updated_at)`,
+      [customerId, productId, name, categoryId, categoryName, now, now, now],
+    )
+    return
+  }
+  await pool.query(
+    `INSERT INTO accord_nx_customer_interest
+      (customer_id, product_id, product_name, category_id, category_name, clicks, carts, last_clicked_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+      clicks = clicks + 1,
+      product_name = VALUES(product_name),
+      category_id = IF(VALUES(category_id) <> '', VALUES(category_id), category_id),
+      category_name = IF(VALUES(category_name) <> '', VALUES(category_name), category_name),
+      last_clicked_at = VALUES(last_clicked_at),
+      updated_at = VALUES(updated_at)`,
+    [customerId, productId, name, categoryId, categoryName, now, now, now],
+  )
+}
+
+function mapInterest(row: RowDataPacket): CustomerInterestProduct {
+  const lastClicked = iso(row.last_clicked_at)
+  const lastCarted = iso(row.last_carted_at)
+  const lastAt = lastClicked && lastCarted
+    ? (lastClicked > lastCarted ? lastClicked : lastCarted)
+    : lastClicked || lastCarted || iso(row.updated_at)
+  return {
+    productId: String(row.product_id || ''),
+    name: String(row.product_name || ''),
+    slug: String(row.slug || ''),
+    categoryName: String(row.category_name || ''),
+    clicks: Number(row.clicks) || 0,
+    carts: Number(row.carts) || 0,
+    lastAt,
+  }
+}
+
+export async function mysqlListCustomerInterest(customerId: string): Promise<CustomerInterestProduct[]> {
+  const id = Number(customerId) || 0
+  if (!id) return []
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT i.product_id, i.product_name, i.category_name, i.clicks, i.carts,
+            i.last_clicked_at, i.last_carted_at, i.updated_at, p.slug
+     FROM accord_nx_customer_interest i
+     LEFT JOIN accord_nx_products p ON p.id = i.product_id
+     WHERE i.customer_id = ?
+     ORDER BY i.updated_at DESC
+     LIMIT 100`,
+    [id],
+  )
+  return rows.map(mapInterest)
+}
+
+async function mysqlProductSlugs(ids: string[]) {
+  const unique = [...new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))]
+  if (!unique.length) return new Map<string, string>()
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const placeholders = unique.map(() => '?').join(',')
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, slug FROM accord_nx_products WHERE id IN (${placeholders})`,
+    unique,
+  )
+  return new Map(rows.map((row) => [String(row.id), String(row.slug || '')]))
+}
+
+export async function mysqlListCustomerPurchases(input: { customerId?: string; phone?: string }): Promise<CustomerPurchaseProduct[]> {
+  const orders = (await mysqlListCustomerOrders(input)).filter((order) => order.status === 'paid')
+  const byId = new Map<string, CustomerPurchaseProduct>()
+  for (const order of orders) {
+    for (const item of order.items) {
+      const productId = String(item.productId || '').trim()
+      if (!productId) continue
+      const existing = byId.get(productId)
+      if (existing) {
+        existing.quantity += item.quantity
+        if (order.createdAt > existing.lastBoughtAt) existing.lastBoughtAt = order.createdAt
+      } else {
+        byId.set(productId, {
+          productId,
+          name: item.name,
+          slug: '',
+          quantity: item.quantity,
+          lastBoughtAt: order.createdAt,
+        })
+      }
+    }
+  }
+  const slugs = await mysqlProductSlugs([...byId.keys()])
+  for (const item of byId.values()) item.slug = slugs.get(item.productId) || ''
+  return [...byId.values()].sort((a, b) => b.lastBoughtAt.localeCompare(a.lastBoughtAt))
+}
+
+export async function mysqlListCustomers(): Promise<CustomerAccount[]> {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM accord_nx_customers ORDER BY last_seen_at DESC LIMIT 200',
+  )
+  return rows.map(mapCustomer)
+}
+
+export async function mysqlListClientInterestBoard(): Promise<ClientInterestRow[]> {
+  const customers = await mysqlListCustomers()
+  if (!customers.length) return []
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [interestRows] = await pool.query<RowDataPacket[]>(
+    `SELECT i.customer_id, i.product_id, i.product_name, i.category_name, i.clicks, i.carts,
+            i.last_clicked_at, i.last_carted_at, i.updated_at, p.slug
+     FROM accord_nx_customer_interest i
+     LEFT JOIN accord_nx_products p ON p.id = i.product_id
+     ORDER BY i.updated_at DESC
+     LIMIT 2000`,
+  )
+  const viewedByCustomer = new Map<string, CustomerInterestProduct[]>()
+  for (const row of interestRows) {
+    const customerId = String(row.customer_id)
+    const list = viewedByCustomer.get(customerId) || []
+    if (list.length < 40) list.push(mapInterest(row))
+    viewedByCustomer.set(customerId, list)
+  }
+  const paid = (await mysqlListCheckoutOrders()).filter((order) => order.status === 'paid')
+  const slugs = await mysqlProductSlugs(paid.flatMap((order) => order.items.map((item) => item.productId)))
+  const boughtByKey = new Map<string, CustomerPurchaseProduct[]>()
+  function pushPurchase(key: string, productId: string, name: string, quantity: number, at: string) {
+    if (!key || !productId) return
+    const list = boughtByKey.get(key) || []
+    const existing = list.find((item) => item.productId === productId)
+    if (existing) {
+      existing.quantity += quantity
+      if (at > existing.lastBoughtAt) existing.lastBoughtAt = at
+    } else {
+      list.push({ productId, name, slug: slugs.get(productId) || '', quantity, lastBoughtAt: at })
+    }
+    boughtByKey.set(key, list)
+  }
+  for (const order of paid) {
+    for (const item of order.items) {
+      pushPurchase(order.phone, item.productId, item.name, item.quantity, order.createdAt)
+      if (order.customerId) pushPurchase(`id:${order.customerId}`, item.productId, item.name, item.quantity, order.createdAt)
+    }
+  }
+  return customers.map((account) => {
+    const byPhone = boughtByKey.get(account.phone) || []
+    const byId = boughtByKey.get(`id:${account.id}`) || []
+    const bought = byId.length ? byId : byPhone
+    return {
+      account,
+      viewed: viewedByCustomer.get(account.id) || [],
+      bought: bought.sort((a, b) => b.lastBoughtAt.localeCompare(a.lastBoughtAt)),
+    }
+  })
+}
+
+export async function mysqlIsLocalCatalogReady() {
+  const state = mysqlState()
+  if (state.localCatalogReady && Date.now() - state.localCatalogReady.at < 30_000) {
+    return state.localCatalogReady.ready
+  }
+  const count = await mysqlCountCatalogProducts().catch(() => 0)
+  const ready = count > 0
+  if (ready) void mysqlSetLocalCatalogReady(true)
+  state.localCatalogReady = { at: Date.now(), ready }
+  return ready
+}
+
+export async function mysqlSetLocalCatalogReady(ready: boolean) {
+  await mysqlGetSiteSettings()
+  const pool = await getPool()
+  await pool.query(
+    `UPDATE accord_nx_site_settings SET use_local_catalog = ?, updated_at = ? WHERE id = ?`,
+    [ready ? 1 : 0, new Date(), 'default'],
+  )
+  mysqlState().localCatalogReady = { at: Date.now(), ready }
+}
+
+function nairobiDate(value = new Date()) {
+  return value.toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' })
+}
+
+export function sanitizeVisitPath(value: unknown) {
+  const raw = String(value || '').trim()
+  if (!raw.startsWith('/')) return ''
+  const path = raw.split('?')[0].split('#')[0].replace(/\/{2,}/g, '/').slice(0, 255)
+  if (!path || path.startsWith('/admin') || path.startsWith('/api') || path.startsWith('/_next')) return ''
+  return path
+}
+
+export function sanitizeVisitorId(value: unknown) {
+  const id = String(value || '').trim()
+  return /^[a-z0-9-]{8,64}$/i.test(id) ? id : ''
+}
+
+export async function mysqlRecordSiteVisit(input: { visitorId: string; path: string }) {
+  const visitorId = sanitizeVisitorId(input.visitorId)
+  const path = sanitizeVisitPath(input.path)
+  if (!visitorId || !path) return
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query(
+    `INSERT INTO accord_nx_site_visits (visit_date, visitor_id, path, hits, last_seen_at)
+     VALUES (?, ?, ?, 1, ?)
+     ON DUPLICATE KEY UPDATE hits = hits + 1, last_seen_at = VALUES(last_seen_at)`,
+    [nairobiDate(now), visitorId, path, now],
+  )
+}
+
+function searchTriggerName(value: unknown) {
+  const trigger = String(value || '').trim()
+  return trigger === 'blur' || trigger === 'pagehide' || trigger === 'submit' || trigger === 'result' ? trigger : 'idle'
+}
+
+function mapSearchHistory(row: RowDataPacket): SearchHistoryRow {
+  const matched = Boolean(row.matched)
+  const source = row.source === 'error' ? 'error' : 'live'
+  const trigger = searchTriggerName(row.trigger_name)
+  return {
+    id: String(row.id),
+    query: String(row.query_raw || ''),
+    resultCount: Number(row.result_count) || 0,
+    matched,
+    source,
+    trigger,
+    path: String(row.path || ''),
+    createdAt: iso(row.updated_at || row.created_at),
+    eventLabel: searchEventLabel(matched, source),
+    activityLabel: searchActivityLabel(trigger),
+  }
+}
+
+export async function mysqlRecordSearchEvent(input: SearchEventInput) {
+  const queryRaw = normalizeSearchQuery(input.query)
+  const queryNorm = searchQueryKey(queryRaw)
+  if (queryNorm.length < 2) return
+  const visitorId = sanitizeVisitorId(input.visitorId)
+  const sessionId = sanitizeVisitorId(input.sessionId) || visitorId
+  const path = sanitizeVisitPath(input.path) || '/'
+  const source = input.catalogReady === false ? 'error' : 'live'
+  const resultCount = source === 'error' ? 0 : Math.max(0, Number(input.resultCount) || 0)
+  const matched = source === 'live' && resultCount > 0 ? 1 : 0
+  const trigger = searchTriggerName(input.trigger)
+  const productId = String(input.productId || '').trim().slice(0, 64)
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const day = nairobiDate(now)
+  if (visitorId) {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, query_norm FROM accord_nx_search_events
+       WHERE visitor_id = ? AND created_at >= DATE_SUB(?, INTERVAL 2 MINUTE)
+       ORDER BY id DESC LIMIT 1`,
+      [visitorId, now],
+    )
+    const previous = rows[0]
+    if (previous && isPrefixSearchUpdate(String(previous.query_norm || ''), queryNorm)) {
+      await pool.query(
+        `UPDATE accord_nx_search_events
+         SET query_raw = ?, query_norm = ?, result_count = ?, matched = ?, source = ?, trigger_name = ?,
+             path = ?, session_id = ?, product_id = IF(? <> '', ?, product_id), search_date = ?, updated_at = ?
+         WHERE id = ?`,
+        [queryRaw, queryNorm, resultCount, matched, source, trigger, path, sessionId, productId, productId, day, now, previous.id],
+      )
+      return
+    }
+  }
+  await pool.query(
+    `INSERT INTO accord_nx_search_events
+      (query_raw, query_norm, result_count, matched, source, trigger_name, path, visitor_id, session_id, product_id, search_date, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [queryRaw, queryNorm, resultCount, matched, source, trigger, path, visitorId, sessionId, productId, day, now, now],
+  )
+}
+
+export async function mysqlGetSearchReport(input: {
+  period?: unknown
+  from?: unknown
+  to?: unknown
+  q?: unknown
+  kind?: unknown
+} = {}): Promise<SearchReport> {
+  const period = parsePeriod(input.period)
+  const range = searchRange(period, String(input.from || ''), String(input.to || ''))
+  const kind = parseSearchKind(input.kind)
+  const needle = searchQueryKey(input.q)
+  const bucket = period === 'weekly'
+    ? `DATE_FORMAT(DATE_SUB(search_date, INTERVAL WEEKDAY(search_date) DAY), '%Y-%m-%d')`
+    : period === 'monthly'
+      ? `DATE_FORMAT(search_date, '%Y-%m-01')`
+      : `DATE_FORMAT(search_date, '%Y-%m-%d')`
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const filters = ['search_date BETWEEN ? AND ?']
+  const params: Array<string | number> = [range.from, range.to]
+  if (needle) {
+    filters.push('query_norm LIKE ?')
+    params.push(`%${needle}%`)
+  }
+  if (kind === 'matched') filters.push(`matched = 1 AND source = 'live'`)
+  if (kind === 'unmet') filters.push(`matched = 0 AND source = 'live'`)
+  const where = filters.join(' AND ')
+
+  const [totalRows, seriesRows, unmetRows, matchedRows, historyRows] = await Promise.all([
+    pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS searches,
+              COUNT(DISTINCT query_norm) AS unique_queries,
+              COUNT(DISTINCT IF(session_id = '', visitor_id, session_id)) AS unique_sessions,
+              SUM(matched = 1 AND source = 'live') AS matched,
+              SUM(matched = 0 AND source = 'live') AS unmatched
+       FROM accord_nx_search_events
+       WHERE ${where}`,
+      params,
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT ${bucket} AS date,
+              COUNT(*) AS searches,
+              SUM(matched = 1 AND source = 'live') AS matched,
+              SUM(matched = 0 AND source = 'live') AS unmatched
+       FROM accord_nx_search_events
+       WHERE ${where}
+       GROUP BY ${bucket}
+       ORDER BY date ASC`,
+      params,
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT SUBSTRING_INDEX(GROUP_CONCAT(query_raw ORDER BY CHAR_LENGTH(query_raw) DESC SEPARATOR 0x1F), 0x1F, 1) AS query_raw,
+              query_norm,
+              COUNT(*) AS searches,
+              COUNT(DISTINCT IF(session_id = '', visitor_id, session_id)) AS sessions,
+              MAX(result_count) AS result_count,
+              MAX(updated_at) AS last_at,
+              SUBSTRING_INDEX(GROUP_CONCAT(trigger_name ORDER BY updated_at DESC), ',', 1) AS trigger_name
+       FROM accord_nx_search_events
+       WHERE ${where} AND matched = 0 AND source = 'live'
+       GROUP BY query_norm
+       ORDER BY sessions DESC, searches DESC, last_at DESC
+       LIMIT 40`,
+      params,
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT SUBSTRING_INDEX(GROUP_CONCAT(query_raw ORDER BY CHAR_LENGTH(query_raw) DESC SEPARATOR 0x1F), 0x1F, 1) AS query_raw,
+              query_norm,
+              COUNT(*) AS searches,
+              COUNT(DISTINCT IF(session_id = '', visitor_id, session_id)) AS sessions,
+              MAX(result_count) AS result_count,
+              MAX(updated_at) AS last_at,
+              SUBSTRING_INDEX(GROUP_CONCAT(trigger_name ORDER BY updated_at DESC), ',', 1) AS trigger_name
+       FROM accord_nx_search_events
+       WHERE ${where} AND matched = 1 AND source = 'live'
+       GROUP BY query_norm
+       ORDER BY searches DESC, sessions DESC, last_at DESC
+       LIMIT 40`,
+      params,
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT id, query_raw, result_count, matched, source, trigger_name, path, created_at, updated_at
+       FROM accord_nx_search_events
+       WHERE ${where}
+       ORDER BY updated_at DESC
+       LIMIT 80`,
+      params,
+    ),
+  ])
+
+  const totals = totalRows[0][0]
+  return {
+    period,
+    from: range.from,
+    to: range.to,
+    totals: {
+      searches: Number(totals?.searches) || 0,
+      uniqueQueries: Number(totals?.unique_queries) || 0,
+      uniqueSessions: Number(totals?.unique_sessions) || 0,
+      matched: Number(totals?.matched) || 0,
+      unmatched: Number(totals?.unmatched) || 0,
+    },
+    series: fillSearchSeries(
+      period,
+      range.from,
+      range.to,
+      seriesRows[0].map((row) => ({
+        date: String(row.date || ''),
+        searches: Number(row.searches) || 0,
+        matched: Number(row.matched) || 0,
+        unmatched: Number(row.unmatched) || 0,
+      })),
+    ),
+    unmet: unmetRows[0].map((row) => ({
+      query: String(row.query_raw || row.query_norm || ''),
+      searches: Number(row.searches) || 0,
+      sessions: Number(row.sessions) || 0,
+      resultCount: Number(row.result_count) || 0,
+      lastAt: iso(row.last_at),
+      activityLabel: searchActivityLabel(String(row.trigger_name || '')),
+    })),
+    matched: matchedRows[0].map((row) => ({
+      query: String(row.query_raw || row.query_norm || ''),
+      searches: Number(row.searches) || 0,
+      sessions: Number(row.sessions) || 0,
+      resultCount: Number(row.result_count) || 0,
+      lastAt: iso(row.last_at),
+      activityLabel: searchActivityLabel(String(row.trigger_name || '')),
+    })),
+    history: historyRows[0].map(mapSearchHistory),
+  }
+}
+
+export async function mysqlListSearchExport(input: {
+  period?: unknown
+  from?: unknown
+  to?: unknown
+  q?: unknown
+  kind?: unknown
+} = {}): Promise<SearchHistoryRow[]> {
+  const period = parsePeriod(input.period)
+  const range = searchRange(period, String(input.from || ''), String(input.to || ''))
+  const kind = parseSearchKind(input.kind)
+  const needle = searchQueryKey(input.q)
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const filters = ['search_date BETWEEN ? AND ?']
+  const params: Array<string | number> = [range.from, range.to]
+  if (needle) {
+    filters.push('query_norm LIKE ?')
+    params.push(`%${needle}%`)
+  }
+  if (kind === 'matched') filters.push(`matched = 1 AND source = 'live'`)
+  if (kind === 'unmet') filters.push(`matched = 0 AND source = 'live'`)
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, query_raw, result_count, matched, source, trigger_name, path, created_at, updated_at
+     FROM accord_nx_search_events
+     WHERE ${filters.join(' AND ')}
+     ORDER BY updated_at DESC
+     LIMIT 2000`,
+    params,
+  )
+  return rows.map(mapSearchHistory)
+}
+
+export type VisitorDay = {
+  date: string
+  visitors: number
+  pageviews: number
+  newVisitors: number
+}
+
+function mapVisitRows(rows: RowDataPacket[]): VisitorDay[] {
+  return rows.map((row) => ({
+    date: String(row.visit_date || row.bucket),
+    visitors: Number(row.visitors) || 0,
+    pageviews: Number(row.pageviews) || 0,
+    newVisitors: Number(row.new_visitors) || 0,
+  }))
+}
+
+function mergeNewVisitors(points: VisitorDay[], newRows: VisitorDay[]) {
+  const byDate = new Map(newRows.map((row) => [row.date, row.newVisitors]))
+  return points.map((point) => ({ ...point, newVisitors: byDate.get(point.date) || point.newVisitors || 0 }))
+}
+
+const FIRST_SEEN = `SELECT visitor_id, MIN(visit_date) AS visit_date FROM accord_nx_site_visits GROUP BY visitor_id`
+
+export async function mysqlGetVisitorStats(days = 90): Promise<{ today: VisitorDay; days: VisitorDay[] }> {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const today = nairobiDate()
+  const span = Math.max(1, Math.min(365, days))
+  const [rows, newRows] = await Promise.all([
+    pool.query<RowDataPacket[]>(
+      `SELECT DATE_FORMAT(visit_date, '%Y-%m-%d') AS visit_date,
+              COUNT(DISTINCT visitor_id) AS visitors,
+              SUM(hits) AS pageviews
+       FROM accord_nx_site_visits
+       WHERE visit_date >= DATE_SUB(?, INTERVAL ? DAY)
+       GROUP BY visit_date
+       ORDER BY visit_date DESC`,
+      [today, span],
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT DATE_FORMAT(visit_date, '%Y-%m-%d') AS visit_date,
+              COUNT(*) AS new_visitors
+       FROM (${FIRST_SEEN}) firsts
+       WHERE visit_date >= DATE_SUB(?, INTERVAL ? DAY)
+       GROUP BY visit_date`,
+      [today, span],
+    ),
+  ])
+  const list = mergeNewVisitors(mapVisitRows(rows[0]), mapVisitRows(newRows[0]))
+  return {
+    today: list.find((row) => row.date === today) || { date: today, visitors: 0, pageviews: 0, newVisitors: 0 },
+    days: list,
+  }
+}
+
+export async function mysqlGetVisitorReport(input: { period?: unknown; from?: unknown; to?: unknown } = {}) {
+  const period = parsePeriod(input.period)
+  const today = nairobiDate()
+  const custom = isIsoDate(String(input.from || '')) || isIsoDate(String(input.to || ''))
+  const range = custom
+    ? clampRange(String(input.from || ''), String(input.to || ''), today)
+    : defaultRange(period, today)
+  const seriesFrom = period === 'weekly' ? weekStart(range.from) : period === 'monthly' ? monthStart(range.from) : range.from
+  const bucket = period === 'weekly'
+    ? `DATE_FORMAT(DATE_SUB(visit_date, INTERVAL WEEKDAY(visit_date) DAY), '%Y-%m-%d')`
+    : period === 'monthly'
+      ? `DATE_FORMAT(visit_date, '%Y-%m-01')`
+      : `DATE_FORMAT(visit_date, '%Y-%m-%d')`
+
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [seriesRows, newSeriesRows, totalRows, newTotalRows, todayRows, todayNewRows] = await Promise.all([
+    pool.query<RowDataPacket[]>(
+      `SELECT ${bucket} AS bucket,
+              COUNT(DISTINCT visitor_id) AS visitors,
+              SUM(hits) AS pageviews
+       FROM accord_nx_site_visits
+       WHERE visit_date BETWEEN ? AND ?
+       GROUP BY ${bucket}
+       ORDER BY bucket ASC`,
+      [range.from, range.to],
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT ${bucket} AS bucket, COUNT(*) AS new_visitors
+       FROM (${FIRST_SEEN}) firsts
+       WHERE visit_date BETWEEN ? AND ?
+       GROUP BY ${bucket}`,
+      [range.from, range.to],
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT COUNT(DISTINCT visitor_id) AS visitors, COALESCE(SUM(hits), 0) AS pageviews
+       FROM accord_nx_site_visits
+       WHERE visit_date BETWEEN ? AND ?`,
+      [range.from, range.to],
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS new_visitors
+       FROM (${FIRST_SEEN}) firsts
+       WHERE visit_date BETWEEN ? AND ?`,
+      [range.from, range.to],
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT DATE_FORMAT(visit_date, '%Y-%m-%d') AS visit_date,
+              COUNT(DISTINCT visitor_id) AS visitors,
+              SUM(hits) AS pageviews
+       FROM accord_nx_site_visits
+       WHERE visit_date = ?
+       GROUP BY visit_date`,
+      [today],
+    ),
+    pool.query<RowDataPacket[]>(
+      `SELECT DATE_FORMAT(visit_date, '%Y-%m-%d') AS visit_date, COUNT(*) AS new_visitors
+       FROM (${FIRST_SEEN}) firsts
+       WHERE visit_date = ?
+       GROUP BY visit_date`,
+      [today],
+    ),
+  ])
+
+  const todayPoint = mergeNewVisitors(mapVisitRows(todayRows[0]), mapVisitRows(todayNewRows[0]))[0]
+    || { date: today, visitors: 0, pageviews: 0, newVisitors: 0 }
+  const totalsRow = totalRows[0][0]
+  const series = fillVisitorSeries(
+    period,
+    seriesFrom,
+    range.to,
+    mergeNewVisitors(mapVisitRows(seriesRows[0]), mapVisitRows(newSeriesRows[0])),
+  )
+  return {
+    period,
+    from: range.from,
+    to: range.to,
+    today: todayPoint,
+    totals: {
+      visitors: Number(totalsRow?.visitors) || 0,
+      pageviews: Number(totalsRow?.pageviews) || 0,
+      newVisitors: Number(newTotalRows[0][0]?.new_visitors) || 0,
+    },
+    series,
+  }
+}
+
+export type EventCommentPublic = {
+  _id: string
+  name: string
+  body: string
+  createdAt: string
+}
+
+export type EventEngagement = {
+  likes: number
+  liked: boolean
+  comments: EventCommentPublic[]
+}
+
+function mapEventComment(row: RowDataPacket): EventCommentPublic {
+  return {
+    _id: String(row.id),
+    name: String(row.name || 'Guest'),
+    body: String(row.body || ''),
+    createdAt: iso(row.created_at),
+  }
+}
+
+export async function mysqlGetEventEngagement(eventId: string, visitorId = ''): Promise<EventEngagement> {
+  const id = mysqlId(eventId)
+  if (!id) return { likes: 0, liked: false, comments: [] }
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const visitor = sanitizeVisitorId(visitorId)
+  const [countRows] = await pool.query<RowDataPacket[]>(
+    'SELECT COUNT(*) AS total FROM accord_nx_event_likes WHERE event_id = ?',
+    [id],
+  )
+  let liked = false
+  if (visitor) {
+    const [likeRows] = await pool.query<RowDataPacket[]>(
+      'SELECT 1 AS liked FROM accord_nx_event_likes WHERE event_id = ? AND visitor_id = ? LIMIT 1',
+      [id, visitor],
+    )
+    liked = Boolean(likeRows[0])
+  }
+  const [commentRows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, name, body, created_at FROM accord_nx_event_comments WHERE event_id = ? ORDER BY created_at ASC, id ASC',
+    [id],
+  )
+  return {
+    likes: Number(countRows[0]?.total) || 0,
+    liked,
+    comments: commentRows.map(mapEventComment),
+  }
+}
+
+export async function mysqlToggleEventLike(eventId: string, visitorId: string) {
+  const id = mysqlId(eventId)
+  const visitor = sanitizeVisitorId(visitorId)
+  if (!id || !visitor) return mysqlGetEventEngagement(eventId, visitorId)
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [existing] = await pool.query<RowDataPacket[]>(
+    'SELECT 1 AS liked FROM accord_nx_event_likes WHERE event_id = ? AND visitor_id = ? LIMIT 1',
+    [id, visitor],
+  )
+  if (existing[0]) {
+    await pool.query('DELETE FROM accord_nx_event_likes WHERE event_id = ? AND visitor_id = ?', [id, visitor])
+  } else {
+    await pool.query('INSERT INTO accord_nx_event_likes (event_id, visitor_id, created_at) VALUES (?, ?, ?)', [
+      id,
+      visitor,
+      new Date(),
+    ])
+  }
+  return mysqlGetEventEngagement(eventId, visitor)
+}
+
+export async function mysqlAddEventComment(input: {
+  eventId: string
+  visitorId: string
+  name: string
+  body: string
+}) {
+  const id = mysqlId(input.eventId)
+  const visitor = sanitizeVisitorId(input.visitorId)
+  const name = input.name.trim().slice(0, 80)
+  const body = input.body.trim().slice(0, 1000)
+  if (!id || !name || !body) throw new Error('Name and comment are required')
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  if (visitor) {
+    const [recent] = await pool.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS total FROM accord_nx_event_comments WHERE event_id = ? AND visitor_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)',
+      [id, visitor],
+    )
+    if (Number(recent[0]?.total) >= 3) throw new Error('Please wait before posting another comment')
+  }
+  await pool.query(
+    'INSERT INTO accord_nx_event_comments (event_id, visitor_id, name, body, created_at) VALUES (?, ?, ?, ?, ?)',
+    [id, visitor, name, body, new Date()],
+  )
+  return mysqlGetEventEngagement(input.eventId, visitor)
+}
+
+export async function mysqlDeleteEventEngagement(eventId: string) {
+  const id = mysqlId(eventId)
+  if (!id) return
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query('DELETE FROM accord_nx_event_likes WHERE event_id = ?', [id])
+  await pool.query('DELETE FROM accord_nx_event_comments WHERE event_id = ?', [id])
+}
+
+export async function mysqlRecordOfferEvent(input: {
+  offerId?: string
+  productId: string
+  productName?: string
+  eventType: 'click' | 'whatsapp'
+  path?: string
+  visitorId?: string
+}) {
+  const productId = String(input.productId || '').trim()
+  if (!productId) return
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query(
+    `INSERT INTO accord_nx_offer_events
+      (offer_id, product_id, product_name, event_type, path, visitor_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      String(input.offerId || '').trim().slice(0, 64),
+      productId.slice(0, 64),
+      String(input.productName || '').trim().slice(0, 255),
+      input.eventType,
+      String(input.path || '').trim().slice(0, 255),
+      sanitizeVisitorId(input.visitorId),
+      new Date(),
+    ],
+  )
+}
+
+export async function mysqlListOfferEvents(limit = 80): Promise<OfferEvent[]> {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, offer_id, product_id, product_name, event_type, path, visitor_id, created_at
+     FROM accord_nx_offer_events
+     ORDER BY created_at DESC, id DESC
+     LIMIT ${Math.max(1, Math.min(200, Number(limit) || 80))}`,
+  )
+  return rows.map((row) => ({
+    _id: String(row.id),
+    offerId: String(row.offer_id || ''),
+    productId: String(row.product_id || ''),
+    productName: String(row.product_name || ''),
+    eventType: row.event_type === 'whatsapp' ? 'whatsapp' : 'click',
+    path: String(row.path || ''),
+    visitorId: String(row.visitor_id || ''),
+    createdAt: iso(row.created_at),
+  }))
+}
+
+export async function mysqlOfferEventStats() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [totals] = await pool.query<RowDataPacket[]>(
+    `SELECT event_type, COUNT(*) AS total
+     FROM accord_nx_offer_events
+     GROUP BY event_type`,
+  )
+  const [byProduct] = await pool.query<RowDataPacket[]>(
+    `SELECT product_id, MAX(product_name) AS product_name,
+            SUM(event_type = 'click') AS clicks,
+            SUM(event_type = 'whatsapp') AS whatsapp
+     FROM accord_nx_offer_events
+     GROUP BY product_id
+     ORDER BY clicks DESC, whatsapp DESC
+     LIMIT 40`,
+  )
+  const clickTotal = Number(totals.find((row) => row.event_type === 'click')?.total) || 0
+  const whatsappTotal = Number(totals.find((row) => row.event_type === 'whatsapp')?.total) || 0
+  return {
+    clicks: clickTotal,
+    whatsapp: whatsappTotal,
+    products: byProduct.map((row) => ({
+      productId: String(row.product_id || ''),
+      productName: String(row.product_name || row.product_id || ''),
+      clicks: Number(row.clicks) || 0,
+      whatsapp: Number(row.whatsapp) || 0,
+    })),
+  }
+}
