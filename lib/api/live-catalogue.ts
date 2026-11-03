@@ -3,7 +3,7 @@ import "server-only";
 import { cacheLife } from "next/cache";
 import { brands as knownBrands } from "@/data/brands";
 import { categories as knownCategories } from "@/data/categories";
-import { accordApiPath } from "@/lib/platform/backend-url";
+import { accordApiPath, catalogueApiSelected, publicAssetUrl } from "@/lib/platform/backend-url";
 import type { BrandWithCount, CatalogueEvent, CategoryWithCount, Job, Offer, Product, SearchHit } from "@/types";
 
 type LiveProduct = {
@@ -78,14 +78,10 @@ function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "item";
 }
 
-function databaseSelected() {
-  return Boolean(process.env.MYSQL_HOST && process.env.MYSQL_USER && process.env.MYSQL_DATABASE);
-}
-
 async function apiJson<T>(path: string): Promise<T | null> {
   "use cache";
   cacheLife("minutes");
-  if (!process.env.MYSQL_HOST || !process.env.MYSQL_USER || !process.env.MYSQL_DATABASE) return null;
+  if (!catalogueApiSelected()) return null;
   try {
     const response = await fetch(accordApiPath(path));
     if (!response.ok) return null;
@@ -108,7 +104,7 @@ function toProduct(item: LiveProduct): Product {
     shortDescription: item.description || `${item.name} from Microvision Enterprises Ltd.`,
     longDescription: item.details || item.description || item.name,
     images: [{ variant: "primary", alt: item.name }],
-    photoUrl: item.image || undefined,
+    photoUrl: publicAssetUrl(item.image),
     specs: [],
     features: Array.isArray(item.highlights)
       ? item.highlights.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, 8)
@@ -128,7 +124,7 @@ function toProduct(item: LiveProduct): Product {
 }
 
 export async function liveCatalogue() {
-  if (!databaseSelected()) return null;
+  if (!catalogueApiSelected()) return null;
   const payload = await apiJson<{ catalog?: { products?: LiveProduct[]; categories?: LiveCategory[] } }>("/api/catalog");
   const products = (payload?.catalog?.products || []).map(toProduct);
   if (!products.length) return null;
@@ -167,7 +163,7 @@ export async function liveCatalogue() {
 }
 
 export async function liveOffers(): Promise<Offer[] | null> {
-  if (!databaseSelected()) return null;
+  if (!catalogueApiSelected()) return null;
   const payload = await apiJson<{ data?: LiveOffer[] }>("/api/offers");
   const rows = payload?.data || [];
   if (!rows.length) return null;
@@ -183,7 +179,7 @@ export async function liveOffers(): Promise<Offer[] | null> {
 }
 
 export async function liveEvents(): Promise<CatalogueEvent[] | null> {
-  if (!databaseSelected()) return null;
+  if (!catalogueApiSelected()) return null;
   const payload = await apiJson<{ data?: LiveEvent[] }>("/api/events");
   const rows = payload?.data || [];
   if (!rows.length) return null;
@@ -200,7 +196,7 @@ export async function liveEvents(): Promise<CatalogueEvent[] | null> {
 }
 
 export async function liveJobs(): Promise<Job[] | null> {
-  if (!databaseSelected()) return null;
+  if (!catalogueApiSelected()) return null;
   const payload = await apiJson<{ data?: LiveJob[] }>("/api/jobs");
   const rows = payload?.data || [];
   if (!rows.length) return null;
@@ -216,14 +212,20 @@ export async function liveJobs(): Promise<Job[] | null> {
   }));
 }
 
+function withPublicCover(item: LiveInstallation): LiveInstallation {
+  const secureUrl = publicAssetUrl(item.cover?.secureUrl);
+  if (!secureUrl || !item.cover) return item;
+  return { ...item, cover: { ...item.cover, secureUrl } };
+}
+
 export async function liveInstallations(): Promise<LiveInstallation[]> {
-  if (!databaseSelected()) return [];
+  if (!catalogueApiSelected()) return [];
   const payload = await apiJson<{ data?: LiveInstallation[] }>("/api/installations");
-  return payload?.data || [];
+  return (payload?.data || []).map(withPublicCover);
 }
 
 export async function liveInstallation(slug: string): Promise<LiveInstallation | null> {
-  if (!databaseSelected()) return null;
+  if (!catalogueApiSelected()) return null;
   const payload = await apiJson<{ data?: LiveInstallation }>(`/api/installations/${encodeURIComponent(slug)}`);
-  return payload?.data || null;
+  return payload?.data ? withPublicCover(payload.data) : null;
 }

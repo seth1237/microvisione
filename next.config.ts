@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
+import { accordApiUrl } from "./lib/platform/backend-url";
 
-const apiUrl = process.env.MICROVISION_API_URL || "http://127.0.0.1:4000";
+const apiUrl = accordApiUrl();
 
 const nextConfig: NextConfig = {
   async rewrites() {

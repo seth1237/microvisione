@@ -8,7 +8,7 @@ import type { CatalogueBundle } from "@/types";
 /** Client read-model. The header, compare and wishlist resolve ids against this bundle. */
 export async function getCatalogueBundle(): Promise<CatalogueBundle> {
   "use cache";
-  cacheLife("hours");
+  cacheLife("minutes");
   const [products, categories, brands, offers, events, searchIndex] = await Promise.all([
     getProducts(),
     getCategories(),

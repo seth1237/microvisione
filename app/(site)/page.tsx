@@ -4,8 +4,7 @@ import { HomeCatalogue } from "@/components/home/home-catalogue";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { liveCertifications } from "@/lib/api/certifications";
-import { listPublicManufacturers } from "@/lib/api/manufacturers";
-import { getBrands, getCategories, getProducts } from "@/lib/api/products";
+import { getCategories, getProducts } from "@/lib/api/products";
 import { site, whatsAppHref } from "@/lib/site";
 
 const why = [
@@ -28,26 +27,11 @@ const why = [
 ];
 
 export default async function HomePage() {
-  const [categories, products, brands, addedManufacturers, certifications] = await Promise.all([
+  const [categories, products, certifications] = await Promise.all([
     getCategories(),
     getProducts(),
-    getBrands(),
-    listPublicManufacturers(),
     liveCertifications(),
   ]);
-  const knownNames = new Set(brands.map((brand) => brand.name.toLowerCase()));
-  const manufacturers = [
-    ...brands,
-    ...addedManufacturers
-      .filter((item) => !knownNames.has(item.name.toLowerCase()))
-      .map((item) => ({
-        id: item.id,
-        slug: item.id,
-        name: item.name,
-        description: "",
-        count: 0,
-      })),
-  ].sort((a, b) => a.name.localeCompare(b.name));
   const catalogue = [
     ...products.filter((product) => product.featured),
     ...products.filter((product) => !product.featured),
@@ -64,7 +48,7 @@ export default async function HomePage() {
               All products
             </Link>
           </div>
-          <HomeCatalogue categories={categories} products={catalogue} brands={manufacturers} />
+          <HomeCatalogue categories={categories} products={catalogue} />
         </div>
       </section>
 

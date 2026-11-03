@@ -6,30 +6,23 @@ import { ChevronDown } from "lucide-react";
 import { ProductCard } from "@/components/product/product-card";
 import { CategoryGlyph } from "@/components/product/category-glyph";
 import { cn } from "@/lib/utils/cn";
-import type { BrandWithCount, CategoryWithCount, Product } from "@/types";
+import type { CategoryWithCount, Product } from "@/types";
 
 const PAGE_SIZE = 12;
 
 export function HomeCatalogue({
   categories,
   products,
-  brands,
 }: {
   categories: CategoryWithCount[];
   products: Product[];
-  brands: BrandWithCount[];
 }) {
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [brandId, setBrandId] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   const filtered = useMemo(
-    () => products.filter((product) => {
-      if (categoryId && product.categoryId !== categoryId) return false;
-      if (brandId && product.brandId !== brandId) return false;
-      return true;
-    }),
-    [brandId, categoryId, products],
+    () => (categoryId ? products.filter((product) => product.categoryId === categoryId) : products),
+    [categoryId, products],
   );
   const shown = filtered.slice(0, visible);
   const remaining = filtered.length - shown.length;
@@ -39,22 +32,15 @@ export function HomeCatalogue({
     setVisible(PAGE_SIZE);
   }
 
-  function selectBrand(id: string | null) {
-    setBrandId(id);
-    setVisible(PAGE_SIZE);
-  }
-
   return (
     <div className="mt-4 grid items-start gap-4 lg:mt-6 lg:grid-cols-[16.5rem_minmax(0,1fr)] lg:gap-6">
-      <div className="sticky top-36 hidden flex-col gap-4 lg:flex">
-        <CategorySidebar
-          categories={categories}
-          products={products}
-          activeId={categoryId}
-          onSelect={selectCategory}
-        />
-        <ManufacturerSidebar brands={brands} activeId={brandId} onSelect={selectBrand} />
-      </div>
+      <CategorySidebar
+        categories={categories}
+        products={products}
+        activeId={categoryId}
+        onSelect={selectCategory}
+        className="sticky top-36 hidden lg:block"
+      />
       <div className="min-w-0">
         <ul className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
           {shown.map((product) => (
@@ -64,7 +50,7 @@ export function HomeCatalogue({
           ))}
         </ul>
         {shown.length === 0 ? (
-          <p className="mt-6 text-sm text-muted">No products in this selection yet.</p>
+          <p className="mt-6 text-sm text-muted">No products in this category yet.</p>
         ) : null}
         {remaining > 0 ? (
           <div className="mt-6 flex justify-center">
@@ -106,7 +92,7 @@ function CategorySidebar({
           <h2 className="text-xs font-bold tracking-wider text-white uppercase">Product categories</h2>
         </div>
       ) : null}
-      <div className="max-h-[42vh] overflow-auto">
+      <div className="max-h-[70vh] overflow-auto">
         <button
           type="button"
           className={cn(
@@ -161,50 +147,6 @@ function CategorySidebar({
             </div>
           );
         })}
-      </div>
-    </aside>
-  );
-}
-
-function ManufacturerSidebar({
-  brands,
-  activeId,
-  onSelect,
-}: {
-  brands: BrandWithCount[];
-  activeId: string | null;
-  onSelect: (id: string | null) => void;
-}) {
-  return (
-    <aside className="overflow-hidden rounded-md border border-[#1211bb]/30 bg-white shadow-sm">
-      <div className="bg-brand px-4 py-3">
-        <h2 className="text-xs font-bold tracking-wider text-white uppercase">Manufacturers</h2>
-      </div>
-      <div className="max-h-72 overflow-auto">
-        <button
-          type="button"
-          className={cn(
-            "flex w-full items-center justify-between border-b border-line px-4 py-3 text-left text-[13px] font-semibold",
-            activeId === null ? "bg-brand-soft text-brand" : "text-ink hover:bg-[#F8FAFC]",
-          )}
-          onClick={() => onSelect(null)}
-        >
-          All manufacturers
-        </button>
-        {brands.map((brand) => (
-          <button
-            key={brand.id}
-            type="button"
-            className={cn(
-              "flex w-full items-center justify-between border-b border-line px-4 py-2.5 text-left text-[13px] font-semibold last:border-0",
-              activeId === brand.id ? "bg-brand text-on-brand" : "text-ink hover:bg-[#F8FAFC]",
-            )}
-            onClick={() => onSelect(brand.id)}
-          >
-            <span className="truncate">{brand.name}</span>
-            <span className={cn("text-[11px]", activeId === brand.id ? "text-on-brand" : "text-muted")}>{brand.count}</span>
-          </button>
-        ))}
       </div>
     </aside>
   );
