@@ -42,6 +42,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState({ companyName: '', contactName: '', phone: '', email: '', productsOfInterest: '' })
+  const [logoName, setLogoName] = useState('')
   const [busy, setBusy] = useState(false)
 
   const filtered = useMemo(() => {
@@ -66,19 +67,22 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
     router.refresh()
   }
 
-  async function addManufacturer(event: React.FormEvent) {
+  async function addManufacturer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const formEl = event.currentTarget
     if (!draft.companyName.trim()) {
       setMessage('Enter the manufacturer name')
       return
     }
     setBusy(true)
     setMessage('')
-    const response = await fetch('/api/admin/manufacturers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draft),
-    })
+    const form = new FormData(formEl)
+    if (!(form.get('logo') instanceof File) || (form.get('logo') as File).size === 0) {
+      setBusy(false)
+      setMessage('Choose a logo image')
+      return
+    }
+    const response = await fetch('/api/admin/manufacturers', { method: 'POST', body: form })
     const payload = await response.json().catch(() => ({}))
     setBusy(false)
     if (!response.ok) {
@@ -86,6 +90,8 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
       return
     }
     setDraft({ companyName: '', contactName: '', phone: '', email: '', productsOfInterest: '' })
+    setLogoName('')
+    formEl.reset()
     setMessage('Manufacturer added.')
     router.refresh()
   }
@@ -110,23 +116,28 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
       <form className="admin-editor" onSubmit={addManufacturer}>
         <label>
           Manufacturer
-          <input value={draft.companyName} onChange={(event) => setDraft({ ...draft, companyName: event.target.value })} placeholder="Company name" />
+          <input name="companyName" value={draft.companyName} onChange={(event) => setDraft({ ...draft, companyName: event.target.value })} placeholder="Company name" />
+        </label>
+        <label>
+          Logo
+          <input name="logo" type="file" accept="image/*" onChange={(event) => setLogoName(event.target.files?.[0]?.name || '')} />
+          {logoName ? <span className="text-muted-foreground">{logoName}</span> : null}
         </label>
         <label>
           Contact
-          <input value={draft.contactName} onChange={(event) => setDraft({ ...draft, contactName: event.target.value })} />
+          <input name="contactName" value={draft.contactName} onChange={(event) => setDraft({ ...draft, contactName: event.target.value })} />
         </label>
         <label>
           Phone
-          <input value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} />
+          <input name="phone" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} />
         </label>
         <label>
           Email
-          <input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
+          <input name="email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
         </label>
         <label>
           Products supplied
-          <input value={draft.productsOfInterest} onChange={(event) => setDraft({ ...draft, productsOfInterest: event.target.value })} />
+          <input name="productsOfInterest" value={draft.productsOfInterest} onChange={(event) => setDraft({ ...draft, productsOfInterest: event.target.value })} />
         </label>
         <button className="button button-primary button-compact" disabled={busy} type="submit">Add manufacturer</button>
       </form>
@@ -153,7 +164,10 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
                 className={`admin-mfr-row${selectedId === item._id ? ' is-open' : ''}`}
                 onClick={() => setSelectedId((current) => current === item._id ? null : item._id)}
               >
-                <b>{item.companyName}</b>
+                <b className="inline-flex items-center gap-2">
+                  {item.logo?.secureUrl ? <img src={item.logo.secureUrl} alt="" className="h-8 w-8 object-contain" /> : null}
+                  {item.companyName}
+                </b>
                 <span className="admin-mfr-products">{item.productsOfInterest || 'No products listed'}</span>
                 <span className="admin-mfr-status">{item.status}</span>
               </button>
@@ -188,6 +202,9 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
             <Detail label="Reference token"><code>{selected.token || '—'}</code></Detail>
             <Detail label="Products supplied" wide>{selected.productsOfInterest || '—'}</Detail>
             <Detail label="Notes" wide>{selected.notes || '—'}</Detail>
+            <Detail label="Logo" wide>
+              {selected.logo?.secureUrl ? <img src={selected.logo.secureUrl} alt="" className="h-16 w-16 object-contain" /> : '—'}
+            </Detail>
             <Detail label="Brochure" wide>
               {selected.brochure?.secureUrl ? (
                 <a className="text-link" href={selected.brochure.secureUrl} target="_blank" rel="noopener noreferrer">Download brochure PDF</a>
@@ -197,6 +214,35 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
           <label>Admin note
             <textarea rows={2} value={note[selected._id] ?? selected.adminNote} onChange={(event) => setNote((current) => ({ ...current, [selected._id]: event.target.value }))} />
           </label>
+          <form
+            className="admin-editor"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              const formEl = event.currentTarget
+              const data = new FormData(formEl)
+              if (!(data.get('logo') instanceof File) || (data.get('logo') as File).size === 0) {
+                setMessage('Choose a logo image')
+                return
+              }
+              setBusy(true)
+              const response = await fetch(`/api/admin/manufacturers/${encodeURIComponent(selected._id)}/logo`, { method: 'POST', body: data })
+              const payload = await response.json().catch(() => ({}))
+              setBusy(false)
+              if (!response.ok) {
+                setMessage(payload.message || 'Could not save the logo')
+                return
+              }
+              formEl.reset()
+              setMessage('Logo saved.')
+              router.refresh()
+            }}
+          >
+            <label>
+              {selected.logo?.secureUrl ? 'Replace logo' : 'Logo'}
+              <input name="logo" type="file" accept="image/*" />
+            </label>
+            <button className="button button-outline button-compact" disabled={busy} type="submit">Save logo</button>
+          </form>
           <div className="admin-job-actions">
             <button type="button" className="button button-primary button-compact" onClick={() => setStatus(selected._id, 'approved')}>Approve</button>
             <button type="button" className="button button-outline button-compact" onClick={() => setStatus(selected._id, 'rejected')}>Reject</button>

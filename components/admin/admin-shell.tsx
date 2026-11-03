@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Award, BarChart3, BookOpen, Briefcase, Calendar, CreditCard, FileText, Heart, ImagePlus, LayoutDashboard, Link2, LogOut, Package, Search, Settings, Store, Tag, Wrench } from 'lucide-react'
+import { Award, BarChart3, BookOpen, Briefcase, Calendar, CreditCard, FileText, Heart, ImagePlus, Images, LayoutDashboard, Link2, LogOut, Package, Search, Settings, Store, Tag, Wrench } from 'lucide-react'
 
 const nav = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
@@ -10,6 +10,7 @@ const nav = [
   { href: '/admin/checkout', label: 'Checkout', icon: CreditCard },
   { href: '/admin/interest', label: 'Client Interest', icon: Heart },
   { href: '/admin/images', label: 'Images', icon: ImagePlus },
+  { href: '/admin/gallery', label: 'Gallery', icon: Images },
   { href: '/admin/certification', label: 'Certification', icon: Award },
   { href: '/admin/catalogues', label: 'Catalogues', icon: FileText },
   { href: '/admin/company-profile', label: 'Company Profile', icon: BookOpen },

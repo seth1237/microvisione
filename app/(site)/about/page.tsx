@@ -20,7 +20,7 @@ export default async function AboutPage() {
   const certificates = await getCertificates();
   return (
     <Container className="py-8">
-      <PageIntro eyebrow="Company" title="About Microvision" lede={site.positioning} />
+      <PageIntro title="About Microvision" lede={site.positioning} />
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <div className="space-y-4">
           <h2 className="text-2xl">Our story</h2>

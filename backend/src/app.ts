@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { ADMIN_COOKIE, CUSTOMER_COOKIE, adminCookieOptions, authenticateAdmin, createAdminSessionValue, createCustomerSessionValue, customerCookieOptions, parseAdminSessionValue, parseCustomerSessionValue } from '../../lib/platform/auth-core'
 import { slugifyName } from '../../lib/platform/catalog'
 import { createCatalogCategory, createCatalogProduct, deleteCatalogProduct, getCatalog, getCatalogProduct, getPriceVisibility, importProductsFromCsv, updateCatalogProduct } from '../../lib/platform/catalog-data'
-import { csvIds, type CertificationLogo } from '../../lib/platform/content'
+import { csvIds, type CertificationLogo, type GalleryPhoto, type ManufacturerSubmission } from '../../lib/platform/content'
 import { isOfferLive, parseOfferProductPrices } from '../../lib/platform/offers'
 import { parseSeo } from '../../lib/platform/seo-fields'
 import { excerptFromBody, parseEventBody } from '../../lib/platform/event-body'
@@ -95,9 +95,11 @@ import {
   mysqlGetCatalogueFile,
   mysqlGetFile,
   mysqlDeleteDoc,
+  mysqlGetDoc,
   mysqlInsertDoc,
   mysqlListDocs,
   mysqlUniqueSlug,
+  mysqlUpdateDoc,
 } from '../../lib/platform/mysql'
 import { catalogImportStatus, importCatalogBatch } from '../../lib/platform/catalog-import'
 import { PRODUCT_CSV_TEMPLATE, productsToExcelXml } from '../../lib/platform/product-csv'
@@ -309,13 +311,26 @@ app.post('/api/jobs/apply', async (c) => {
   try {
     const cv = await uploadFormCv(form.get('cv'))
     if (!cv) return c.json({ success: false, message: 'Upload your CV' }, 400)
+    const jobId = formText(form, 'jobId')
+    let department = formText(form, 'department')
+    let workingTerms = formText(form, 'workingTerms')
+    let jobTitle = ''
+    if (jobId) {
+      const job = await getJobById(jobId)
+      if (!job || !job.published) return c.json({ success: false, message: 'That role is no longer open' }, 400)
+      department = job.department || department || 'General'
+      workingTerms = job.employmentType || workingTerms || 'Full time'
+      jobTitle = job.title
+    }
     const data = await createJobApplication({
       fullName: formText(form, 'fullName'),
       email: formText(form, 'email'),
       phone: formText(form, 'phone'),
-      department: formText(form, 'department'),
-      workingTerms: formText(form, 'workingTerms'),
+      department,
+      workingTerms,
       notes: formText(form, 'notes'),
+      jobId,
+      jobTitle,
       cv,
     })
     return c.json({ success: true, data: { id: data?._id } })
@@ -973,11 +988,11 @@ app.patch('/api/admin/products/:id', async (c) => {
   if (auth.error) return c.json(auth.error, auth.status)
   if (!isMysqlConfigured()) return c.json({ success: false, message: 'MySQL is not configured' }, 503)
   const id = c.req.param('id')
-  const body = await c.req.json().catch(() => ({})) as { name?: string; details?: string; distributedFor?: string; hidden?: boolean; checkout?: boolean; highlights?: unknown }
+  const body = await c.req.json().catch(() => ({})) as { name?: string; details?: string; distributedFor?: string; hidden?: boolean; checkout?: boolean; highlights?: unknown; howToUse?: string; measuringParameters?: string }
   const highlights = Array.isArray(body.highlights)
     ? body.highlights.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8)
     : undefined
-  if (!String(body.name || '').trim() && body.details === undefined && body.distributedFor === undefined && highlights === undefined && typeof body.hidden !== 'boolean' && typeof body.checkout !== 'boolean') {
+  if (!String(body.name || '').trim() && body.details === undefined && body.distributedFor === undefined && highlights === undefined && body.howToUse === undefined && body.measuringParameters === undefined && typeof body.hidden !== 'boolean' && typeof body.checkout !== 'boolean') {
     return c.json({ success: false, message: 'Nothing to update' }, 400)
   }
   try {
@@ -986,6 +1001,8 @@ app.patch('/api/admin/products/:id', async (c) => {
       details: body.details,
       distributedFor: body.distributedFor,
       highlights,
+      howToUse: body.howToUse,
+      measuringParameters: body.measuringParameters,
       hidden: typeof body.hidden === 'boolean' ? body.hidden : undefined,
       checkout: typeof body.checkout === 'boolean' ? body.checkout : undefined,
     })
@@ -1300,8 +1317,8 @@ app.get('/api/manufacturers', async (c) => {
   return c.json({
     success: true,
     data: items
-      .filter((item) => item.status === 'approved' && item.companyName)
-      .map((item) => ({ id: item._id, name: item.companyName })),
+      .filter((item) => item.status === 'approved' && item.companyName && item.logo?.secureUrl)
+      .map((item) => ({ id: item._id, name: item.companyName, logoUrl: item.logo?.secureUrl || '' })),
   })
 })
 
@@ -1309,23 +1326,43 @@ app.post('/api/admin/manufacturers', async (c) => {
   const auth = requireAdmin(c)
   if (auth.error) return c.json(auth.error, auth.status)
   try {
-    const body = await c.req.json().catch(() => ({}))
-    const companyName = textValue(body.companyName, 160)
+    const form = await c.req.formData()
+    const companyName = formText(form, 'companyName')
     if (!companyName) return c.json({ success: false, message: 'Enter the manufacturer name' }, 400)
+    const logo = await uploadFormImage(form.get('logo'), 'microvision/manufacturers', slugifyName(companyName) || 'logo')
+    if (!logo) return c.json({ success: false, message: 'Choose a logo image' }, 400)
     const item = await createManufacturer({
       companyName,
-      contactName: textValue(body.contactName, 120),
-      email: textValue(body.email, 160),
-      phone: textValue(body.phone, 40),
-      website: textValue(body.website, 200),
-      productsOfInterest: textValue(body.productsOfInterest, 500),
-      notes: textValue(body.notes, 500),
+      contactName: formText(form, 'contactName').slice(0, 120),
+      email: formText(form, 'email').slice(0, 160),
+      phone: formText(form, 'phone').slice(0, 40),
+      website: formText(form, 'website').slice(0, 200),
+      productsOfInterest: formText(form, 'productsOfInterest').slice(0, 500),
+      notes: formText(form, 'notes').slice(0, 500),
       brochure: null,
+      logo,
       status: 'approved',
     })
     return c.json({ success: true, data: item })
   } catch (error) {
     return c.json({ success: false, message: error instanceof Error ? error.message : 'Could not add the manufacturer' }, 400)
+  }
+})
+
+app.post('/api/admin/manufacturers/:id/logo', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  const existing = await mysqlGetDoc<ManufacturerSubmission>('manufacturer', c.req.param('id'))
+  if (!existing) return c.json({ success: false, message: 'Manufacturer not found' }, 404)
+  try {
+    const form = await c.req.formData()
+    const logo = await uploadFormImage(form.get('logo'), 'microvision/manufacturers', slugifyName(existing.companyName) || 'logo')
+    if (!logo) return c.json({ success: false, message: 'Choose a logo image' }, 400)
+    if (existing.logo?.publicId?.startsWith('mysql:')) await mysqlDeleteFile(existing.logo.publicId).catch(() => undefined)
+    const item = await mysqlUpdateDoc<ManufacturerSubmission>('manufacturer', existing._id, { logo })
+    return c.json({ success: true, data: item })
+  } catch (error) {
+    return c.json({ success: false, message: error instanceof Error ? error.message : 'Could not save the logo' }, 400)
   }
 })
 
@@ -1459,7 +1496,7 @@ app.get('/api/certifications', async (c) => {
   const data = rows
     .filter((item) => item.image?.secureUrl)
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
-    .map((item) => ({ id: item._id, name: item.name, imageUrl: item.image?.secureUrl || '' }))
+    .map((item) => ({ id: item._id, name: item.name, purpose: item.purpose || '', imageUrl: item.image?.secureUrl || '' }))
   return c.json({ success: true, data })
 })
 
@@ -1485,6 +1522,7 @@ app.post('/api/admin/certifications', async (c) => {
     const slug = await mysqlUniqueSlug('certification', slugifyName(name) || 'logo')
     const item = await mysqlInsertDoc<CertificationLogo>('certification', {
       name,
+      purpose: formText(form, 'purpose').slice(0, 240),
       slug,
       image,
       published: true,
@@ -1500,6 +1538,53 @@ app.delete('/api/admin/certifications/:id', async (c) => {
   if (auth.error) return c.json(auth.error, auth.status)
   const removed = await mysqlDeleteDoc<CertificationLogo>('certification', c.req.param('id'))
   if (!removed) return c.json({ success: false, message: 'Logo not found' }, 404)
+  if (removed.image?.publicId?.startsWith('mysql:')) await mysqlDeleteFile(removed.image.publicId).catch(() => undefined)
+  return c.json({ success: true })
+})
+
+app.get('/api/gallery', async (c) => {
+  const rows = await mysqlListDocs<GalleryPhoto>('gallery', true).catch(() => [])
+  const data = rows
+    .filter((item) => item.image?.secureUrl)
+    .map((item) => ({ id: item._id, caption: item.caption || '', imageUrl: item.image?.secureUrl || '' }))
+  return c.json({ success: true, data })
+})
+
+app.get('/api/admin/gallery', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  const rows = await mysqlListDocs<GalleryPhoto>('gallery').catch(() => [])
+  return c.json({ success: true, data: rows })
+})
+
+app.post('/api/admin/gallery', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  const form = await c.req.formData()
+  const caption = formText(form, 'caption').slice(0, 240)
+  if (!caption) return c.json({ success: false, message: 'Enter a caption' }, 400)
+  try {
+    const image = await uploadFormImage(form.get('image'), 'microvision/gallery', slugifyName(caption) || 'photo')
+    if (!image) return c.json({ success: false, message: 'Choose an image' }, 400)
+    const slug = await mysqlUniqueSlug('gallery', slugifyName(caption) || 'photo')
+    const item = await mysqlInsertDoc<GalleryPhoto>('gallery', {
+      caption,
+      slug,
+      image,
+      published: true,
+    })
+    return c.json({ success: true, data: item })
+  } catch (error) {
+    return c.json({ success: false, message: error instanceof Error ? error.message : 'Could not save the photo' }, 400)
+  }
+})
+
+app.delete('/api/admin/gallery/:id', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  const removed = await mysqlDeleteDoc<GalleryPhoto>('gallery', c.req.param('id'))
+  if (!removed) return c.json({ success: false, message: 'Photo not found' }, 404)
+  if (removed.image?.publicId?.startsWith('mysql:')) await mysqlDeleteFile(removed.image.publicId).catch(() => undefined)
   return c.json({ success: true })
 })
 

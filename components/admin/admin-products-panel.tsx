@@ -43,6 +43,8 @@ export function AdminProductsPanel({
   const [names, setNames] = useState<Record<string, string>>({})
   const [distributedFor, setDistributedFor] = useState<Record<string, string>>({})
   const [highlights, setHighlights] = useState<Record<string, string>>({})
+  const [howToUse, setHowToUse] = useState<Record<string, string>>({})
+  const [measuringParameters, setMeasuringParameters] = useState<Record<string, string>>({})
   const [uploadKind, setUploadKind] = useState<Record<string, 'photo' | 'installation'>>({})
 
   const hiddenCount = products.filter((product) => product.hidden).length
@@ -176,6 +178,8 @@ export function AdminProductsPanel({
           .map((line) => line.trim())
           .filter(Boolean)
           .slice(0, 8),
+        howToUse: howToUse[productId] ?? product?.howToUse ?? '',
+        measuringParameters: measuringParameters[productId] ?? product?.measuringParameters ?? '',
       }),
     })
     const payload = await response.json()
@@ -433,12 +437,30 @@ export function AdminProductsPanel({
                       />
                     </label>
                     <label>
-                      Product details
+                      Overview
                       <textarea
                         value={detailValue(product)}
                         onChange={(event) => setDetails((current) => ({ ...current, [product.id]: event.target.value }))}
                         rows={5}
-                        placeholder="Specifications, pack size, usage notes…"
+                        placeholder="What the machine is and who it is for"
+                      />
+                    </label>
+                    <label>
+                      How to use
+                      <textarea
+                        value={howToUse[product.id] ?? product.howToUse ?? ''}
+                        onChange={(event) => setHowToUse((current) => ({ ...current, [product.id]: event.target.value }))}
+                        rows={5}
+                        placeholder={'One step per line.\nSwitch the meter on\nInsert a strip\nApply the sample'}
+                      />
+                    </label>
+                    <label>
+                      Measuring parameters
+                      <textarea
+                        value={measuringParameters[product.id] ?? product.measuringParameters ?? ''}
+                        onChange={(event) => setMeasuringParameters((current) => ({ ...current, [product.id]: event.target.value }))}
+                        rows={5}
+                        placeholder={'One parameter per line. Use a colon for the value.\nGlucose: 20–600 mg/dL\nSample: Capillary blood'}
                       />
                     </label>
                     <label>

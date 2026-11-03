@@ -19,7 +19,7 @@ export function CartView() {
       <div className="rounded-md border border-dashed border-line bg-surface p-8">
         <h2 className="text-xl">Your cart is empty</h2>
         <p className="mt-2 text-muted">Products you add from the catalogue show up here.</p>
-        <Link href="/products?mode=buy" className="mt-4 inline-flex font-semibold text-brand">View items you can buy</Link>
+        <Link href="/#products" className="mt-4 inline-flex font-semibold text-brand">View items you can buy</Link>
       </div>
     );
   }

@@ -7,6 +7,7 @@ import type { CertificationLogo } from "@/lib/platform/content";
 export function AdminCertificationPanel({ items }: { items: CertificationLogo[] }) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -31,6 +32,7 @@ export function AdminCertificationPanel({ items }: { items: CertificationLogo[] 
       return;
     }
     setName("");
+    setPurpose("");
     event.currentTarget.reset();
     setMessage("Logo added. It will show in the Certification carousel.");
     router.refresh();
@@ -56,7 +58,7 @@ export function AdminCertificationPanel({ items }: { items: CertificationLogo[] 
         <div>
           <span className="admin-eyebrow">Microvision Enterprises Ltd</span>
           <h1>Certification</h1>
-          <p>Upload logos of companies and institutions. They appear as a carousel on the site.</p>
+          <p>Upload a certificate logo and the event or purpose. Both appear in the homepage carousel.</p>
         </div>
       </header>
       {message ? <p className="admin-message">{message}</p> : null}
@@ -64,6 +66,10 @@ export function AdminCertificationPanel({ items }: { items: CertificationLogo[] 
         <label>
           Company or institution
           <input name="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name shown with the logo" />
+        </label>
+        <label>
+          Event or purpose
+          <input name="purpose" value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="Training, award, partnership…" />
         </label>
         <label>
           Logo
@@ -80,6 +86,7 @@ export function AdminCertificationPanel({ items }: { items: CertificationLogo[] 
               {item.image?.secureUrl ? <img src={item.image.secureUrl} alt="" /> : null}
             </div>
             <p>{item.name}</p>
+            {item.purpose ? <p className="text-muted-foreground">{item.purpose}</p> : null}
             <button type="button" disabled={busy} onClick={() => remove(item._id)}>
               Remove
             </button>

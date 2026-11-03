@@ -17,10 +17,13 @@ type LiveProduct = {
   price?: number;
   inStock?: boolean;
   image?: string | null;
+  images?: string[];
   slug: string;
   featured?: boolean;
   checkout?: boolean;
   highlights?: string[];
+  howToUse?: string;
+  measuringParameters?: string;
 };
 
 type LiveCategory = {
@@ -39,6 +42,7 @@ type LiveOffer = {
   startDate?: string;
   endDate?: string;
   productIds?: string[];
+  banner?: { secureUrl?: string };
   createdAt: string;
 };
 
@@ -50,6 +54,7 @@ type LiveEvent = {
   startAt?: string;
   createdAt: string;
   location?: string;
+  cover?: { secureUrl?: string };
 };
 
 type LiveJob = {
@@ -61,6 +66,8 @@ type LiveJob = {
   department?: string;
   summary: string;
   description?: string;
+  requirements?: string;
+  image?: { secureUrl?: string } | null;
 };
 
 export type LiveInstallation = {
@@ -105,10 +112,16 @@ function toProduct(item: LiveProduct): Product {
     longDescription: item.details || item.description || item.name,
     images: [{ variant: "primary", alt: item.name }],
     photoUrl: publicAssetUrl(item.image),
+    photos: [...new Set([item.image, ...(item.images || [])].filter(Boolean) as string[])]
+      .map((url) => publicAssetUrl(url))
+      .filter((url): url is string => Boolean(url))
+      .map((url) => ({ url, caption: '' })),
     specs: [],
     features: Array.isArray(item.highlights)
       ? item.highlights.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, 8)
       : [],
+    howToUse: item.howToUse || "",
+    measuringParameters: item.measuringParameters || "",
     purchaseMode: item.checkout && price > 0 ? "both" : "quote",
     price: price > 0 ? price : undefined,
     currency: "KES",
@@ -121,6 +134,19 @@ function toProduct(item: LiveProduct): Product {
     featured: item.featured,
     faqs: [],
   };
+}
+
+export async function liveProductBySlug(slug: string): Promise<Product | null> {
+  if (!catalogueApiSelected()) return null;
+  try {
+    const response = await fetch(accordApiPath("/api/catalog"), { cache: "no-store" });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { catalog?: { products?: LiveProduct[] } };
+    const item = (payload.catalog?.products || []).find((product) => product.slug === slug);
+    return item ? toProduct(item) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function liveCatalogue() {
@@ -147,7 +173,7 @@ export async function liveCatalogue() {
       id,
       slug: known?.slug || id,
       name: known?.name || id,
-      description: known?.description || "",
+      description: "",
       count,
     };
   });
@@ -175,15 +201,15 @@ export async function liveOffers(): Promise<Offer[] | null> {
     startsAt: offer.startDate || offer.createdAt.slice(0, 10),
     expiresAt: offer.endDate || undefined,
     productIds: offer.productIds || [],
+    bannerUrl: publicAssetUrl(offer.banner?.secureUrl),
   }));
 }
 
 export async function liveEvents(): Promise<CatalogueEvent[] | null> {
   if (!catalogueApiSelected()) return null;
   const payload = await apiJson<{ data?: LiveEvent[] }>("/api/events");
-  const rows = payload?.data || [];
-  if (!rows.length) return null;
-  return rows.map((event) => ({
+  if (!payload) return null;
+  return (payload.data || []).map((event) => ({
     id: event._id,
     slug: event.slug,
     title: event.title,
@@ -192,23 +218,33 @@ export async function liveEvents(): Promise<CatalogueEvent[] | null> {
     location: event.location || "Nairobi",
     summary: event.description,
     body: event.description,
+    coverUrl: publicAssetUrl(event.cover?.secureUrl),
   }));
 }
 
 export async function liveJobs(): Promise<Job[] | null> {
   if (!catalogueApiSelected()) return null;
-  const payload = await apiJson<{ data?: LiveJob[] }>("/api/jobs");
-  const rows = payload?.data || [];
-  if (!rows.length) return null;
-  return rows.map((job) => ({
+  let payload: { data?: LiveJob[] } | null = null;
+  try {
+    const response = await fetch(accordApiPath("/api/jobs"), { cache: "no-store" });
+    if (!response.ok) return null;
+    payload = (await response.json()) as { data?: LiveJob[] };
+  } catch {
+    return null;
+  }
+  return (payload.data || []).map((job) => ({
     id: job._id,
     slug: job.slug,
     title: job.title,
     location: job.location,
     type: job.employmentType || job.department || "",
+    department: job.department || "",
     closingDate: "",
     summary: job.summary,
+    description: job.description || "",
     responsibilities: job.description ? job.description.split(/\n+/).filter(Boolean) : [],
+    requirements: job.requirements ? job.requirements.split(/\n+/).filter(Boolean) : [],
+    imageUrl: publicAssetUrl(job.image?.secureUrl),
   }));
 }
 

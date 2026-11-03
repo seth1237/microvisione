@@ -44,7 +44,7 @@ export function PurchasePanel({
   return (
     <>
       <aside className="rounded-md border border-line bg-white p-5">
-        <p className="text-sm text-muted">{brandName}</p>
+        {brandName && !/tbc/i.test(brandName) ? <p className="text-sm text-muted">{brandName}</p> : null}
         <div className="mt-2">
           <PriceTag price={product.price} placeholder={product.priceIsPlaceholder} className="text-lg" />
         </div>

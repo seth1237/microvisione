@@ -42,6 +42,8 @@ export type CatalogProduct = {
   manufacturer?: string
   distributedFor?: string
   highlights?: string[]
+  howToUse?: string
+  measuringParameters?: string
   clicks: number
   shares: number
   carts: number
@@ -213,6 +215,8 @@ export function mergeOverlay(product: CatalogProduct, content?: {
   images?: Array<{ publicId?: string; secureUrl?: string; installation?: boolean }>
   distributedFor?: string
   highlights?: string[]
+  howToUse?: string
+  measuringParameters?: string
 } | null): CatalogProduct {
   if (!content) return product
   const extraAssets = (content.images || []).filter((image): image is { publicId: string; secureUrl: string; installation?: boolean } => Boolean(image.secureUrl && image.publicId))
@@ -230,6 +234,8 @@ export function mergeOverlay(product: CatalogProduct, content?: {
     description: product.description || stripHtml(overlayDetails),
     distributedFor: String(content.distributedFor || '').trim() || product.distributedFor,
     highlights: Array.isArray(content.highlights) ? content.highlights : product.highlights,
+    howToUse: content.howToUse ?? product.howToUse,
+    measuringParameters: content.measuringParameters ?? product.measuringParameters,
   }
 }
 

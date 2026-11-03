@@ -72,6 +72,9 @@ export interface Product {
   faqs: ProductFaq[];
   /** Uploaded catalogue photo. Illustrations are used when this is absent. */
   photoUrl?: string;
+  photos?: { url: string; caption: string }[];
+  howToUse?: string;
+  measuringParameters?: string;
 }
 
 export interface Category {
@@ -107,6 +110,7 @@ export interface Offer {
   startsAt: string;
   expiresAt?: string;
   productIds: string[];
+  bannerUrl?: string;
   isPlaceholder?: true;
 }
 
@@ -121,6 +125,7 @@ export interface CatalogueEvent {
   location: string;
   summary: string;
   body: string;
+  coverUrl?: string;
   isPlaceholder?: true;
 }
 
@@ -142,6 +147,10 @@ export interface Job {
   closingDate: string;
   summary: string;
   responsibilities: string[];
+  department?: string;
+  description?: string;
+  requirements?: string[];
+  imageUrl?: string;
   isPlaceholder?: true;
 }
 

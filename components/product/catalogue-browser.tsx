@@ -35,7 +35,7 @@ export async function CatalogueBrowser({
 }) {
   const parsed = parseCatalogueQuery(await searchParams);
   const query: CatalogueQuery = lockedCategory ? { ...parsed, category: lockedCategory } : parsed;
-  const basePath = lockedCategory ? `/category/${lockedCategory}` : "/products";
+  const basePath = lockedCategory ? `/category/${lockedCategory}` : "/";
   const linkQuery: CatalogueQuery = { ...query, category: lockedCategory ? undefined : query.category };
 
   const [result, categories, brands, lines] = await Promise.all([
@@ -79,16 +79,10 @@ export async function CatalogueBrowser({
     <Container className="py-8">
       <Breadcrumbs
         items={
-          lockedCategory
-            ? [
-                { href: "/", label: "Home" },
-                { href: "/products", label: "Products" },
-                { label: heading },
-              ]
-            : [
-                { href: "/", label: "Home" },
-                { label: "Products" },
-              ]
+          [
+            { href: "/", label: "Home" },
+            { label: heading },
+          ]
         }
       />
       <header className="mt-4 max-w-3xl">

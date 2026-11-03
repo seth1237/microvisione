@@ -30,18 +30,27 @@ export async function createJobApplication(input: {
   department: string
   workingTerms: string
   notes?: string
+  jobId?: string
+  jobTitle?: string
   cv: { buffer: Buffer; filename: string; mime: string }
 }) {
   if (!isMysqlConfigured()) throw new Error('Applications are not available right now')
   const fullName = String(input.fullName || '').trim()
   const email = String(input.email || '').trim()
   const phone = String(input.phone || '').trim()
-  const department = String(input.department || '').trim()
-  const workingTerms = String(input.workingTerms || '').trim()
+  let department = String(input.department || '').trim()
+  let workingTerms = String(input.workingTerms || '').trim()
+  const jobId = String(input.jobId || '').trim()
+  const jobTitle = String(input.jobTitle || '').trim()
   if (!fullName || !email || !phone) throw new Error('Enter your name, email, and phone number')
   if (!email.includes('@')) throw new Error('Enter a valid email address')
-  if (!isDepartment(department)) throw new Error('Choose a department')
-  if (!isWorkingTerms(workingTerms)) throw new Error('Choose internship, full time, or part time')
+  if (jobId) {
+    if (!department) department = 'General'
+    if (!workingTerms) workingTerms = 'Full time'
+  } else {
+    if (!isDepartment(department)) throw new Error('Choose a department')
+    if (!isWorkingTerms(workingTerms)) throw new Error('Choose internship, full time, or part time')
+  }
   if (!input.cv?.buffer?.length) throw new Error('Upload your CV')
   return mysqlCreateJobApplication({
     fullName,
@@ -50,6 +59,8 @@ export async function createJobApplication(input: {
     department,
     workingTerms,
     notes: input.notes,
+    jobId,
+    jobTitle,
     cv: input.cv,
   })
 }

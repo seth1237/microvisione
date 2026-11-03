@@ -31,7 +31,6 @@ export function ProductTabs({ product }: { product: Product }) {
     .split("\n\n")
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph && !isPlaceholderCopy(paragraph, product.name));
-  const features = product.features.filter((feature) => !isPlaceholderCopy(feature, product.name));
   const specs = product.specs.filter((spec) => spec.value.trim() && !isPlaceholderCopy(spec.value, product.name));
   const notes = product.accessoryNotes.filter((note) => !isPlaceholderCopy(note, product.name));
   const documents = product.documents.filter(
@@ -40,9 +39,23 @@ export function ProductTabs({ product }: { product: Product }) {
   const faqs = product.faqs.filter(
     (faq) => !isPlaceholderCopy(faq.question, product.name) && !isPlaceholderCopy(faq.answer, product.name),
   );
+  const steps = (product.howToUse || "")
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*\d+[\.\)]\s*/, "").trim())
+    .filter((line) => line && !isPlaceholderCopy(line, product.name));
+  const parameters = (product.measuringParameters || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !isPlaceholderCopy(line, product.name))
+    .map((line) => {
+      const match = line.match(/^(.{2,48}?)\s*[:|]\s+(.+)$/);
+      return match ? { label: match[1].trim(), value: match[2].trim() } : { label: "", value: line };
+    });
 
   const sections = [
-    overview.length || features.length ? "overview" : "",
+    overview.length ? "overview" : "",
+    steps.length ? "how-to-use" : "",
+    parameters.length ? "measuring" : "",
     specs.length ? "specifications" : "",
     notes.length ? "consumables" : "",
     documents.length ? "documents" : "",
@@ -53,6 +66,8 @@ export function ProductTabs({ product }: { product: Product }) {
 
   const labels: Record<string, string> = {
     overview: "Overview",
+    "how-to-use": "How to use",
+    measuring: "Measuring parameters",
     specifications: "Specifications",
     consumables: "Consumables and accessories",
     documents: "Documents",
@@ -60,8 +75,8 @@ export function ProductTabs({ product }: { product: Product }) {
   };
 
   return (
-    <Tabs.Root defaultValue={sections[0]} className="mt-10 min-w-0">
-      <Tabs.List className="flex gap-2 overflow-x-auto border-b border-line" aria-label="Product information">
+    <Tabs.Root defaultValue={sections[0]} className="mt-10 min-w-0 rounded-md border border-line bg-white">
+      <Tabs.List className="flex gap-1 overflow-x-auto border-b border-line px-2" aria-label="Product information">
         {sections.map((value) => (
           <Tabs.Trigger
             key={value}
@@ -75,15 +90,37 @@ export function ProductTabs({ product }: { product: Product }) {
       {sections.includes("overview") ? (
         <Tabs.Content value="overview" className="space-y-4 py-6">
           {overview.map((paragraph) => (
-            <p key={paragraph.slice(0, 48)} className="max-w-3xl text-ink">{paragraph}</p>
+            <p key={paragraph.slice(0, 48)} className="max-w-3xl px-5 text-ink">{paragraph}</p>
           ))}
-          {features.length ? (
-            <ul className="max-w-3xl list-disc space-y-2 pl-5 text-ink">
-              {features.map((feature) => (
-                <li key={feature}>{feature}</li>
+        </Tabs.Content>
+      ) : null}
+      {sections.includes("how-to-use") ? (
+        <Tabs.Content value="how-to-use" className="py-6">
+          <ol className="max-w-3xl list-decimal space-y-3 px-5 pl-10 text-ink">
+            {steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </Tabs.Content>
+      ) : null}
+      {sections.includes("measuring") ? (
+        <Tabs.Content value="measuring" className="py-6">
+          {parameters.some((row) => row.label) ? (
+            <dl className="divide-y divide-line">
+              {parameters.map((row) => (
+                <div key={`${row.label}-${row.value}`} className="grid gap-1 px-5 py-3 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-6">
+                  <dt className="font-medium text-ink">{row.label || row.value}</dt>
+                  {row.label ? <dd className="text-ink">{row.value}</dd> : <dd className="sr-only">{row.value}</dd>}
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <ul className="max-w-3xl list-disc space-y-2 px-5 pl-10">
+              {parameters.map((row) => (
+                <li key={row.value}>{row.value}</li>
               ))}
             </ul>
-          ) : null}
+          )}
         </Tabs.Content>
       ) : null}
       {sections.includes("specifications") ? (

@@ -3,7 +3,6 @@ import "server-only";
 import { cacheLife } from "next/cache";
 import { sampleDocuments, sampleMachines, sampleOrders, sampleTickets } from "@/data/account";
 import { certificates, jobs, services } from "@/data/content";
-import { events } from "@/data/events";
 import { offers } from "@/data/offers";
 import { products } from "@/data/products";
 import { liveEvents, liveJobs, liveOffers } from "@/lib/api/live-catalogue";
@@ -29,16 +28,10 @@ export async function getOfferProducts(offer: Offer): Promise<Product[]> {
     .filter((product): product is Product => Boolean(product));
 }
 
-async function staticEvents(): Promise<CatalogueEvent[]> {
-  "use cache";
-  cacheLife("hours");
-  return [...events].sort((a, b) => (a.date < b.date ? 1 : -1));
-}
-
 export async function getEvents(): Promise<CatalogueEvent[]> {
   const live = await liveEvents().catch(() => null);
-  if (live) return live;
-  return staticEvents();
+  if (live) return live.filter((event) => !event.isPlaceholder);
+  return [];
 }
 
 export async function getEventBySlug(slug: string): Promise<CatalogueEvent | null> {

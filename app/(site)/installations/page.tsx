@@ -14,7 +14,6 @@ export default async function InstallationsPage() {
   return (
     <Container className="py-8">
       <PageIntro
-        eyebrow="Projects"
         title="Installations"
         lede="Published installation records from the Microvision catalogue."
       />

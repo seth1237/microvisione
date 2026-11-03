@@ -11,6 +11,17 @@ export type CertificationLogo = {
   _id: string
   name: string
   slug: string
+  purpose: string
+  image: MediaAsset | null
+  published: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type GalleryPhoto = {
+  _id: string
+  caption: string
+  slug: string
   image: MediaAsset | null
   published: boolean
   createdAt: string
@@ -122,6 +133,7 @@ export type ManufacturerSubmission = {
   productsOfInterest: string
   notes: string
   brochure: MediaAsset | null
+  logo?: MediaAsset | null
   status: 'pending' | 'approved' | 'rejected'
   token: string
   adminNote: string

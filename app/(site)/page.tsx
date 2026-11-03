@@ -1,10 +1,12 @@
-import Link from "next/link";
 import { CertificationCarousel } from "@/components/home/certification-carousel";
 import { HomeCatalogue } from "@/components/home/home-catalogue";
+import { ManufacturerCarousel } from "@/components/home/manufacturer-carousel";
+import { SiteGallery } from "@/components/home/site-gallery";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { liveCertifications } from "@/lib/api/certifications";
 import { getCategories, getProducts } from "@/lib/api/products";
+import { liveGallery, liveManufacturers } from "@/lib/api/site-media";
 import { site, whatsAppHref } from "@/lib/site";
 
 const why = [
@@ -27,10 +29,12 @@ const why = [
 ];
 
 export default async function HomePage() {
-  const [categories, products, certifications] = await Promise.all([
+  const [categories, products, certifications, manufacturers, gallery] = await Promise.all([
     getCategories(),
     getProducts(),
     liveCertifications(),
+    liveManufacturers(),
+    liveGallery(),
   ]);
   const catalogue = [
     ...products.filter((product) => product.featured),
@@ -38,16 +42,11 @@ export default async function HomePage() {
   ];
   return (
     <>
-      <section className="bg-[#F8FAFC] py-4 sm:py-8" aria-labelledby="products-heading">
+      <section id="products" className="bg-[#F8FAFC] py-4 sm:py-8" aria-labelledby="products-heading">
         <div className="mx-auto w-full max-w-[1600px] px-3 sm:px-6 lg:px-8">
-          <div className="flex items-end justify-between gap-3">
-            <h1 id="products-heading" className="text-xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
-              Products
-            </h1>
-            <Link href="/products" className="shrink-0 text-sm font-semibold text-brand hover:text-brand-deep">
-              All products
-            </Link>
-          </div>
+          <h1 id="products-heading" className="text-xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
+            Products
+          </h1>
           <HomeCatalogue categories={categories} products={catalogue} />
         </div>
       </section>
@@ -68,6 +67,8 @@ export default async function HomePage() {
       </section>
 
       <CertificationCarousel logos={certifications} />
+      <ManufacturerCarousel items={manufacturers} />
+      <SiteGallery photos={gallery} />
 
       <section className="bg-brand py-12 text-on-brand">
         <Container className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">

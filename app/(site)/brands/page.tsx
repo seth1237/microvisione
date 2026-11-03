@@ -1,32 +1,27 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
-import { PlaceholderNote } from "@/components/ui/placeholder-note";
 import { getBrands } from "@/lib/api/products";
 
 export const metadata = {
   title: "Manufacturers",
-  description: "Catalogue brand labels used by Microvision Enterprises Ltd. Manufacturer profiles are confirmed on request.",
+  description: "Manufacturers whose equipment is listed by Microvision Enterprises Ltd.",
 };
 
 export default async function BrandsPage() {
-  const brands = await getBrands();
+  const brands = (await getBrands()).filter((brand) => brand.name && !/tbc/i.test(brand.name));
   return (
     <Container className="py-8">
       <PageIntro
-        eyebrow="Brands"
         title="Manufacturers"
-        lede="Each name is the label used on the product title. Country, authorisation and a company profile are still to be confirmed."
+        lede="Names used on the equipment in the catalogue."
       />
-      <div className="mt-4 max-w-2xl">
-        <PlaceholderNote>Do not treat these entries as verified manufacturer pages.</PlaceholderNote>
-      </div>
+      {brands.length === 0 ? <p className="mt-8 text-sm text-muted">No manufacturers yet.</p> : null}
       <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {brands.map((brand) => (
           <li key={brand.id}>
             <Link href={`/brands/${brand.slug}`} className="block h-full rounded-md border border-line bg-surface p-4 hover:border-brand">
               <h2 className="text-xl">{brand.name}</h2>
-              <p className="mt-2 text-sm text-muted">{brand.description}</p>
               <p className="mt-3 text-sm font-semibold text-brand">{brand.count} products</p>
             </Link>
           </li>

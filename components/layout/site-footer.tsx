@@ -31,8 +31,7 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
           <h2 className="text-sm font-semibold uppercase tracking-wide">Explore</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {[
-              ["/products", "All products"],
-              ["/offers", "Offers"],
+              ["/#gallery", "Gallery"],
               ["/brands", "Manufacturers"],
               ["/services", "Biomedical and after-sales"],
               ["/about", "About"],

@@ -3,19 +3,27 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product/product-card";
 import { ProductGallery } from "@/components/product/product-gallery";
+import { ProductShare } from "@/components/product/product-share";
 import { ProductTabs } from "@/components/product/product-tabs";
 import { PurchasePanel } from "@/components/product/purchase-panel";
 import { WhiteCanvas } from "@/components/product/white-canvas";
 import { JsonLd } from "@/components/seo/json-ld";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Container } from "@/components/ui/container";
+import { liveProductBySlug } from "@/lib/api/live-catalogue";
 import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
 import { absoluteUrl } from "@/lib/site";
 import type { Metadata } from "next";
 
+export const instant = false;
+
 export async function generateStaticParams() {
   const products = await getProducts();
   return products.map((product) => ({ slug: product.slug }));
+}
+
+async function loadProduct(slug: string) {
+  return (await liveProductBySlug(slug)) || (await getProductBySlug(slug));
 }
 
 export async function generateMetadata({
@@ -24,7 +32,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const product = await loadProduct(slug);
   if (!product) return { title: "Product" };
   return {
     title: product.name,
@@ -51,7 +59,7 @@ export default function ProductPage({ params }: { params: Promise<{ slug: string
 
 async function ProductContent({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const product = await loadProduct(slug);
   if (!product) notFound();
   const [brands, categories, related] = await Promise.all([
     getBrands(),
@@ -79,21 +87,40 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
       <Breadcrumbs
         items={[
           { href: "/", label: "Home" },
-          { href: "/products", label: "Products" },
           ...(category ? [{ href: `/category/${category.slug}`, label: category.name }] : []),
           { label: product.name },
         ]}
       />
-      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.8fr)]">
+      <div className="mt-6 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-3xl text-ink sm:text-4xl">{product.name}</h1>
-          <div className="mt-6">
-            <ProductGallery name={product.name} photoUrl={product.photoUrl} />
-          </div>
-          <ProductTabs product={product} />
+          {category ? (
+            <p className="mt-2 text-sm text-muted">
+              <Link href={`/category/${category.slug}`} className="font-semibold text-brand">{category.name}</Link>
+            </p>
+          ) : null}
         </div>
-        <PurchasePanel product={product} brandName={brand?.name ?? "Manufacturer TBC"} />
+        <ProductShare title={product.name} url={url} />
       </div>
+      {product.features.filter((feature) => feature.trim() && !/tbc|placeholder/i.test(feature)).length ? (
+        <ul className="mt-4 flex gap-2 overflow-x-auto">
+          {product.features.filter((feature) => feature.trim() && !/tbc|placeholder/i.test(feature)).map((feature) => (
+            <li key={feature} className="shrink-0 rounded-full border border-line bg-white px-3 py-1 text-sm text-ink">
+              {feature}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-6 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <ProductGallery
+          name={product.name}
+          photos={product.photos?.length ? product.photos : product.photoUrl ? [{ url: product.photoUrl, caption: "" }] : []}
+        />
+        <div className="lg:sticky lg:top-24">
+          <PurchasePanel product={product} brandName={brand && !/tbc/i.test(brand.name) ? brand.name : ""} />
+        </div>
+      </div>
+      <ProductTabs product={product} />
       {related.length > 0 ? (
         <section className="mt-12" aria-labelledby="related-heading">
           <h2 id="related-heading" className="text-2xl">Related products</h2>

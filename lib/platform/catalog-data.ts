@@ -235,7 +235,7 @@ export async function createCatalogProduct(input: {
 
 export async function updateCatalogProduct(
   id: string,
-  updates: { name?: string; details?: string; distributedFor?: string; description?: string; hidden?: boolean; checkout?: boolean; highlights?: string[] },
+  updates: { name?: string; details?: string; distributedFor?: string; description?: string; hidden?: boolean; checkout?: boolean; highlights?: string[]; howToUse?: string; measuringParameters?: string },
 ) {
   if (!isMysqlConfigured()) throw new Error('MySQL is not configured')
   const product = await mysqlUpdateCatalogProduct(id, {
@@ -246,10 +246,12 @@ export async function updateCatalogProduct(
     checkout: updates.checkout,
   })
   if (!product) throw new Error('Product not found')
-  if (updates.details !== undefined || updates.distributedFor !== undefined || updates.highlights !== undefined) {
+  if (updates.details !== undefined || updates.distributedFor !== undefined || updates.highlights !== undefined || updates.howToUse !== undefined || updates.measuringParameters !== undefined) {
     await mysqlUpdateProductDetails(product.id, updates.details ?? product.details ?? '', {
       distributedFor: updates.distributedFor,
       highlights: updates.highlights,
+      howToUse: updates.howToUse,
+      measuringParameters: updates.measuringParameters,
     })
   }
   await invalidateCatalog()

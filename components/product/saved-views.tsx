@@ -16,7 +16,7 @@ export function WishlistView() {
       <div className="rounded-md border border-dashed border-line bg-surface p-8">
         <h2 className="text-xl">No saved products</h2>
         <p className="mt-2 text-muted">Use the heart on a product card to keep it in this browser.</p>
-        <Link href="/products" className="mt-4 inline-flex font-semibold text-brand">Browse products</Link>
+        <Link href="/#products" className="mt-4 inline-flex font-semibold text-brand">Browse products</Link>
       </div>
     );
   }
@@ -44,7 +44,7 @@ export function CompareView() {
       <div className="rounded-md border border-dashed border-line bg-surface p-8">
         <h2 className="text-xl">Nothing to compare</h2>
         <p className="mt-2 text-muted">Add up to four products from their cards. Specifications are still TBC, so the table shows that honestly.</p>
-        <Link href="/products" className="mt-4 inline-flex font-semibold text-brand">Browse products</Link>
+        <Link href="/#products" className="mt-4 inline-flex font-semibold text-brand">Browse products</Link>
       </div>
     );
   }

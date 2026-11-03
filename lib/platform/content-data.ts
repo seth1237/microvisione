@@ -229,6 +229,7 @@ function serializeManufacturer(doc: WithDates<ManufacturerSubmission> & { _id: O
     productsOfInterest: doc.productsOfInterest || '',
     notes: doc.notes || '',
     brochure: doc.brochure || null,
+    logo: doc.logo || null,
     status: doc.status || 'pending',
     token: doc.token,
     adminNote: doc.adminNote || '',
@@ -982,7 +983,7 @@ export async function resolveRedirect(pathname: string): Promise<{ to: string; s
     return { to: `/category/${path.slice('/product-category/'.length)}`, status: 301 }
   }
   if (path.startsWith('/product-tag/')) {
-    return { to: '/products', status: 301 }
+    return { to: '/', status: 301 }
   }
   const mapped = await getRedirectByFrom(path).catch(() => null)
   if (mapped) return { to: mapped.to, status: mapped.status }

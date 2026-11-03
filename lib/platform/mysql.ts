@@ -43,6 +43,8 @@ type ProductContent = {
   images: ProductImage[]
   distributedFor?: string
   highlights?: string[]
+  howToUse?: string
+  measuringParameters?: string
   updatedAt: Date
 }
 
@@ -379,6 +381,8 @@ async function applyMysqlSchema() {
   await mysqlAddColumnIfMissing('accord_nx_products', 'hidden', `hidden TINYINT(1) NOT NULL DEFAULT 0`)
   await mysqlAddColumnIfMissing('accord_nx_products', 'checkout', `checkout TINYINT(1) NOT NULL DEFAULT 0`)
   await mysqlAddColumnIfMissing('accord_nx_product_content', 'highlights', `highlights TEXT NULL`)
+  await mysqlAddColumnIfMissing('accord_nx_product_content', 'how_to_use', `how_to_use MEDIUMTEXT NULL`)
+  await mysqlAddColumnIfMissing('accord_nx_product_content', 'measuring_parameters', `measuring_parameters MEDIUMTEXT NULL`)
   await mysqlAddColumnIfMissing('accord_nx_product_performance', 'carts', `carts INT NOT NULL DEFAULT 0`)
   await mysqlAddColumnIfMissing('accord_nx_product_performance', 'last_carted_at', `last_carted_at DATETIME NULL`)
   await pool.query(`
@@ -455,6 +459,8 @@ async function applyMysqlSchema() {
       KEY status_created (status, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   `)
+  await mysqlAddColumnIfMissing('accord_nx_job_applications', 'job_id', `job_id VARCHAR(64) NOT NULL DEFAULT ''`)
+  await mysqlAddColumnIfMissing('accord_nx_job_applications', 'job_title', `job_title VARCHAR(191) NOT NULL DEFAULT ''`)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accord_nx_search_events (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -599,6 +605,8 @@ type ContentRow = RowDataPacket & {
   details: string
   distributed_for: string
   highlights?: string | null
+  how_to_use?: string | null
+  measuring_parameters?: string | null
   updated_at: Date
 }
 
@@ -715,6 +723,8 @@ type JobApplicationRow = RowDataPacket & {
   cv_file_id: number | null
   cv_filename: string
   status: string
+  job_id?: string
+  job_title?: string
   created_at: Date | string
 }
 
@@ -730,6 +740,8 @@ function mapJobApplication(row: JobApplicationRow): JobApplication {
     cvFilename: String(row.cv_filename || ''),
     cvFileId: mysqlId(row.cv_file_id),
     status: row.status === 'reviewed' ? 'reviewed' : 'new',
+    jobId: String(row.job_id || ''),
+    jobTitle: String(row.job_title || ''),
     createdAt: iso(row.created_at),
   }
 }
@@ -741,6 +753,8 @@ export async function mysqlCreateJobApplication(input: {
   department: string
   workingTerms: string
   notes?: string
+  jobId?: string
+  jobTitle?: string
   cv: { buffer: Buffer; filename: string; mime: string }
 }) {
   await ensureMysqlSchema()
@@ -748,9 +762,19 @@ export async function mysqlCreateJobApplication(input: {
   const now = new Date()
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO accord_nx_job_applications
-      (full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, '', 'new', ?)`,
-    [input.fullName, input.email, input.phone, input.department, input.workingTerms, String(input.notes || '').trim(), now],
+      (full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, job_id, job_title, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, '', 'new', ?, ?, ?)`,
+    [
+      input.fullName,
+      input.email,
+      input.phone,
+      input.department,
+      input.workingTerms,
+      String(input.notes || '').trim(),
+      String(input.jobId || ''),
+      String(input.jobTitle || '').slice(0, 191),
+      now,
+    ],
   )
   const id = String(result.insertId)
   try {
@@ -779,7 +803,7 @@ export async function mysqlListJobApplications(): Promise<JobApplication[]> {
   await ensureMysqlSchema()
   const pool = await getPool()
   const [rows] = await pool.query<JobApplicationRow[]>(
-    `SELECT id, full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, created_at
+    `SELECT id, full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, job_id, job_title, created_at
      FROM accord_nx_job_applications ORDER BY created_at DESC`,
   )
   return rows.map(mapJobApplication)
@@ -791,7 +815,7 @@ export async function mysqlGetJobApplication(id: string) {
   await ensureMysqlSchema()
   const pool = await getPool()
   const [rows] = await pool.query<JobApplicationRow[]>(
-    `SELECT id, full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, created_at
+    `SELECT id, full_name, email, phone, department, working_terms, notes, cv_file_id, cv_filename, status, job_id, job_title, created_at
      FROM accord_nx_job_applications WHERE id = ? LIMIT 1`,
     [applicationId],
   )
@@ -1040,6 +1064,8 @@ export async function mysqlGetProductContentMap() {
       details: row.details || '',
       distributedFor: row.distributed_for || '',
       highlights: parseHighlights(row.highlights),
+      howToUse: row.how_to_use || '',
+      measuringParameters: row.measuring_parameters || '',
       images: [],
       updatedAt: row.updated_at,
     })
@@ -1118,7 +1144,7 @@ export async function mysqlSetProductImageInstallation(erpProductId: string, pub
   return mysqlGetProductContent(erpProductId)
 }
 
-export async function mysqlUpdateProductDetails(erpProductId: string, details: string, extra?: { distributedFor?: string; highlights?: string[] }) {
+export async function mysqlUpdateProductDetails(erpProductId: string, details: string, extra?: { distributedFor?: string; highlights?: string[]; howToUse?: string; measuringParameters?: string }) {
   await ensureMysqlSchema()
   const pool = await getPool()
   const now = new Date()
@@ -1128,15 +1154,19 @@ export async function mysqlUpdateProductDetails(erpProductId: string, details: s
   const updates = ['details = VALUES(details)', 'updated_at = VALUES(updated_at)']
   if (extra?.distributedFor !== undefined) updates.push('distributed_for = VALUES(distributed_for)')
   if (highlights) updates.push('highlights = VALUES(highlights)')
+  if (extra?.howToUse !== undefined) updates.push('how_to_use = VALUES(how_to_use)')
+  if (extra?.measuringParameters !== undefined) updates.push('measuring_parameters = VALUES(measuring_parameters)')
   await pool.query(
-    `INSERT INTO accord_nx_product_content (erp_product_id, details, distributed_for, highlights, updated_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO accord_nx_product_content (erp_product_id, details, distributed_for, highlights, how_to_use, measuring_parameters, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE ${updates.join(', ')}`,
     [
       erpProductId,
       details,
       extra?.distributedFor || '',
       highlights ? JSON.stringify(highlights) : null,
+      extra?.howToUse ?? null,
+      extra?.measuringParameters ?? null,
       now,
     ],
   )

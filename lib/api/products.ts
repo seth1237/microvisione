@@ -105,18 +105,24 @@ export async function getSearchIndex(): Promise<SearchHit[]> {
 }
 
 export async function getLinesForCategory(categorySlug: string): Promise<string[]> {
-  "use cache";
-  cacheLife("hours");
-  const category = categories.find((item) => item.slug === categorySlug);
+  const [catalogue, categoryList] = await Promise.all([getProducts(), getCategories()]);
+  const category = categoryList.find((item) => item.slug === categorySlug);
   if (!category) return [];
   const lines = new Set<string>();
-  for (const product of products) {
+  for (const product of catalogue) {
     if (product.categoryId === category.id && product.line) lines.add(product.line);
   }
   return [...lines].sort();
 }
 
-function matchesQuery(product: Product, query: CatalogueQuery, categoryId?: string, brandId?: string): boolean {
+function matchesQuery(
+  product: Product,
+  query: CatalogueQuery,
+  categoryId?: string,
+  brandId?: string,
+  categoryList: { id: string; name: string }[] = categories,
+  brandList: { id: string; name: string }[] = brands,
+): boolean {
   if (categoryId && product.categoryId !== categoryId) return false;
   if (brandId && product.brandId !== brandId) return false;
   if (query.line && product.line !== query.line) return false;
@@ -133,8 +139,8 @@ function matchesQuery(product: Product, query: CatalogueQuery, categoryId?: stri
       product.slug,
       product.line ?? "",
       product.tags.join(" "),
-      brands.find((brand) => brand.id === product.brandId)?.name ?? "",
-      categories.find((category) => category.id === product.categoryId)?.name ?? "",
+      brandList.find((brand) => brand.id === product.brandId)?.name ?? "",
+      categoryList.find((category) => category.id === product.categoryId)?.name ?? "",
     ]
       .join(" ")
       .toLowerCase();
@@ -162,13 +168,12 @@ export async function queryCatalogue(query: CatalogueQuery): Promise<{
   pages: number;
   pageSize: number;
 }> {
-  "use cache";
-  cacheLife("hours");
   const pageSize = 12;
+  const [catalogue, categoryList, brandList] = await Promise.all([getProducts(), getCategories(), getBrands()]);
   const categoryId = query.category
-    ? categories.find((category) => category.slug === query.category)?.id
+    ? categoryList.find((category) => category.slug === query.category)?.id
     : undefined;
-  const brandId = query.brand ? brands.find((brand) => brand.slug === query.brand)?.id : undefined;
+  const brandId = query.brand ? brandList.find((brand) => brand.slug === query.brand)?.id : undefined;
 
   if (query.category && !categoryId) {
     return { items: [], total: 0, page: 1, pages: 1, pageSize };
@@ -177,8 +182,8 @@ export async function queryCatalogue(query: CatalogueQuery): Promise<{
     return { items: [], total: 0, page: 1, pages: 1, pageSize };
   }
 
-  const filtered = products
-    .filter((product) => matchesQuery(product, query, categoryId, brandId))
+  const filtered = catalogue
+    .filter((product) => matchesQuery(product, query, categoryId, brandId, categoryList, brandList))
     .sort(compareProducts(query.sort));
   const total = filtered.length;
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -194,9 +199,10 @@ export async function queryCatalogue(query: CatalogueQuery): Promise<{
 }
 
 export async function getRelatedProducts(product: Product): Promise<Product[]> {
-  "use cache";
-  cacheLife("hours");
-  return product.relatedIds
-    .map((id) => products.find((item) => item.id === id))
+  const catalogue = await getProducts();
+  const related = product.relatedIds
+    .map((id) => catalogue.find((item) => item.id === id))
     .filter((item): item is Product => Boolean(item));
+  if (related.length) return related.slice(0, 4);
+  return catalogue.filter((item) => item.id !== product.id && item.categoryId === product.categoryId).slice(0, 4);
 }

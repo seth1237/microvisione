@@ -33,6 +33,8 @@ export type JobApplication = {
   cvFilename: string
   cvFileId: number | null
   status: 'new' | 'reviewed'
+  jobId: string
+  jobTitle: string
   createdAt: string
 }
 
@@ -54,5 +56,5 @@ export type JobPost = {
 }
 
 export function jobHref(job: Pick<JobPost, 'slug'>) {
-  return `/careers#${job.slug}`
+  return `/careers/${job.slug}`
 }

@@ -1,14 +1,14 @@
-import { EnquiryForm } from "@/components/forms/enquiry-form";
-import { Badge } from "@/components/ui/badge";
+export const instant = false
+
+import Link from "next/link";
+import { JobApplyForm } from "@/components/forms/job-apply-form";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
-import { PlaceholderNote } from "@/components/ui/placeholder-note";
 import { getJobs } from "@/lib/api/content";
-import { formatIsoDate } from "@/lib/utils/format";
 
 export const metadata = {
   title: "Careers",
-  description: "Example vacancies and a talent-pool form at Microvision Enterprises Ltd, Nairobi.",
+  description: "Open roles and the talent pool at Microvision Enterprises Ltd, Nairobi.",
 };
 
 export default async function CareersPage() {
@@ -16,36 +16,30 @@ export default async function CareersPage() {
   return (
     <Container className="py-8">
       <PageIntro
-        eyebrow="Careers"
         title="Work at Microvision"
-        lede="Open roles are examples until a hiring manager publishes them. You can still leave a CV for the talent pool."
+        lede="Open a role to send your CV, or join the talent pool if you want to be considered for later openings."
       />
-      <div className="mt-4 max-w-2xl">
-        <PlaceholderNote>Closing dates and duties are placeholders.</PlaceholderNote>
-      </div>
-      <ul className="mt-8 space-y-4">
-        {jobs.map((job) => (
-          <li key={job.id} id={job.slug} className="rounded-md border border-line bg-surface p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone="warning">Example vacancy</Badge>
-              <span className="text-sm text-muted">Closes {formatIsoDate(job.closingDate)}</span>
-            </div>
-            <h2 className="mt-2 text-2xl">{job.title}</h2>
-            <p className="text-sm text-muted">{job.location} · {job.type}</p>
-            <p className="mt-3">{job.summary}</p>
-            <ul className="mt-3 list-disc pl-5 text-sm text-muted">
-              {job.responsibilities.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
-      <section className="mt-10 max-w-2xl rounded-md border border-line bg-surface p-5" aria-labelledby="apply">
-        <h2 id="apply" className="text-2xl">Apply or join the talent pool</h2>
-        <p className="mt-2 text-sm text-muted">Choose a listed role or “Talent pool”. The CV stays on this device and is not uploaded.</p>
+      {jobs.length === 0 ? (
+        <p className="mt-8 text-sm text-muted">No open roles right now.</p>
+      ) : (
+        <ul className="mt-8 space-y-4">
+          {jobs.map((job) => (
+            <li key={job.id}>
+              <Link href={`/careers/${job.slug}`} className="block rounded-md border border-line bg-surface p-5 hover:border-brand">
+                <h2 className="text-2xl">{job.title}</h2>
+                <p className="mt-1 text-sm text-muted">{[job.location, job.type].filter(Boolean).join(" · ")}</p>
+                {job.summary ? <p className="mt-3">{job.summary}</p> : null}
+                <p className="mt-3 text-sm font-semibold text-brand">View role</p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <section className="mt-10 max-w-2xl rounded-md border border-line bg-surface p-5" aria-labelledby="talent-pool">
+        <h2 id="talent-pool" className="text-2xl">Talent pool</h2>
+        <p className="mt-2 text-sm text-muted">Send a CV when there is no open role that fits. It is kept with the other applications.</p>
         <div className="mt-4">
-          <EnquiryForm kind="career" vacancies={jobs.map((job) => job.title)} />
+          <JobApplyForm />
         </div>
       </section>
     </Container>

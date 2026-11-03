@@ -11,7 +11,7 @@ export const metadata = {
 export default function ContactPage() {
   return (
     <Container className="py-8">
-      <PageIntro eyebrow="Contact" title="Get in touch" lede={site.positioning} />
+      <PageIntro title="Get in touch" lede={site.positioning} />
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="space-y-4">
           <div className="rounded-md border border-line bg-surface p-5">

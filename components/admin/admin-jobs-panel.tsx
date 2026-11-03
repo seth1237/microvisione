@@ -76,12 +76,16 @@ export function AdminJobsPanel({ jobs, applications = [] }: { jobs: JobPost[]; a
         </button>
       </header>
       {message && <p className="admin-message">{message}</p>}
-      <AdminJobApplications applications={applications} />
+      <AdminJobApplications
+        title="Talent pool"
+        hint="CVs sent without an open role."
+        applications={applications.filter((item) => !item.jobId)}
+      />
       <div className="admin-card">
         <div className="card-title">
           <div>
             <h3>Open roles</h3>
-            <span>Published jobs appear on /jobs, with each role at /vacancy/{"{slug}"}.</span>
+            <span>Published jobs appear on /careers. Applications for a role are listed under that job.</span>
           </div>
         </div>
         {jobs.length === 0 && <p className="text-muted-foreground">No jobs yet.</p>}
@@ -95,6 +99,13 @@ export function AdminJobsPanel({ jobs, applications = [] }: { jobs: JobPost[]; a
                   <small>{job.location} · {job.employmentType}{job.published ? '' : ' · Draft'}</small>
                 </div>
               </button>
+              <div className="admin-editor">
+                <AdminJobApplications
+                  title="Applicants"
+                  hint={`${applications.filter((item) => item.jobId === job._id).length} for this role.`}
+                  applications={applications.filter((item) => item.jobId === job._id)}
+                />
+              </div>
             </article>
           ))}
         </div>

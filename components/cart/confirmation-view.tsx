@@ -11,7 +11,7 @@ export function ConfirmationView() {
       <div className="rounded-md border border-dashed border-line bg-surface p-8">
         <h2 className="text-xl">No order in this browser</h2>
         <p className="mt-2 text-muted">Complete checkout to see a demonstration confirmation.</p>
-        <Link href="/products?mode=buy" className="mt-4 inline-flex font-semibold text-brand">Browse priced items</Link>
+        <Link href="/#products" className="mt-4 inline-flex font-semibold text-brand">Browse priced items</Link>
       </div>
     );
   }

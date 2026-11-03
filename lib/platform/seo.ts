@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { categoryHref, productCategoryHref, productHref, type CatalogProduct } from '@/lib/platform/catalog'
-import { ROUTES } from '@/lib/platform/routes'
 import { socialProfileUrls, TWITTER_HANDLE } from '@/lib/platform/socials'
 import { COMPANY } from '@/lib/platform/utils'
 
@@ -240,7 +239,6 @@ export function productBreadcrumbItems(
 ): BreadcrumbCrumb[] {
   const crumbs: BreadcrumbCrumb[] = [
     { name: 'Home', path: '/' },
-    { name: 'Products', path: ROUTES.products },
   ]
   if (product.categoryName) {
     crumbs.push({ name: product.categoryName, path: productCategoryHref(product) })
@@ -390,11 +388,6 @@ export function organizationJsonLd() {
         name: COMPANY.name,
         inLanguage: 'en-KE',
         publisher: { '@id': `${COMPANY.url}/#organization` },
-        potentialAction: {
-          '@type': 'SearchAction',
-          target: `${COMPANY.url}/products?q={search_term_string}`,
-          'query-input': 'required name=search_term_string',
-        },
       },
     ],
   }

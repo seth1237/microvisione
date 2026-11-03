@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { ProductCard } from "@/components/product/product-card";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
-import { PlaceholderNote } from "@/components/ui/placeholder-note";
 import { getBrandBySlug, getBrands, getProducts } from "@/lib/api/products";
 import type { Metadata } from "next";
 
@@ -39,10 +38,7 @@ async function BrandContent({ params }: { params: Promise<{ slug: string }> }) {
 
   return (
     <Container className="py-8">
-      <PageIntro eyebrow="Manufacturer" title={brand.name} lede={brand.description} />
-      <div className="mt-4 max-w-2xl">
-        <PlaceholderNote>Profile details are TBC.</PlaceholderNote>
-      </div>
+      <PageIntro title={brand.name} lede={brand.description && !/tbc/i.test(brand.description) ? brand.description : `${brand.count} products`} />
       <ul className="mt-8 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
         {products.map((product) => (
           <li key={product.id}>

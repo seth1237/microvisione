@@ -13,7 +13,6 @@ export default function QuotePage() {
   return (
     <Container className="py-8">
       <PageIntro
-        eyebrow="B2B"
         title="Request a quote"
         lede="Add equipment to the basket, then send your organisation details. You will get a reference number in this browser. Nothing is emailed yet."
       />

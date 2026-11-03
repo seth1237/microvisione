@@ -15,7 +15,6 @@ export default async function ServicesPage() {
   return (
     <Container className="py-8">
       <PageIntro
-        eyebrow="After-sales"
         title="Services and biomedical support"
         lede="Request installation, a service contract, calibration, training or technical support. Response times are agreed per site."
       />

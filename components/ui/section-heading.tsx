@@ -2,14 +2,12 @@ import { cn } from "@/lib/utils/cn";
 
 export function SectionHeading({
   id,
-  eyebrow,
   title,
   text,
   action,
   className,
 }: {
   id?: string;
-  eyebrow?: string;
   title: string;
   text?: string;
   action?: React.ReactNode;
@@ -18,10 +16,7 @@ export function SectionHeading({
   return (
     <div className={cn("flex flex-wrap items-end justify-between gap-4", className)}>
       <div className="max-w-2xl">
-        {eyebrow ? (
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">{eyebrow}</p>
-        ) : null}
-        <h2 id={id} className="mt-1 text-2xl text-ink sm:text-3xl">{title}</h2>
+        <h2 id={id} className="text-2xl text-ink sm:text-3xl">{title}</h2>
         {text ? <p className="mt-2 text-muted">{text}</p> : null}
       </div>
       {action}

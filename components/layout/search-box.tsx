@@ -54,7 +54,6 @@ export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boole
       event.preventDefault();
       const picked = matches[active];
       if (picked && term.trim()) go(`/product/${picked.slug}`);
-      else if (term.trim()) go(`/products?q=${encodeURIComponent(term.trim())}`);
     }
   }
 
@@ -102,15 +101,6 @@ export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boole
               </li>
             ))
           )}
-          <li>
-            <button
-              type="button"
-              className="block w-full border-t border-line px-3 py-2 text-left text-sm font-semibold text-brand"
-              onClick={() => go(`/products?q=${encodeURIComponent(term.trim())}`)}
-            >
-              View all results
-            </button>
-          </li>
         </ul>
       ) : null}
     </div>

@@ -11,7 +11,7 @@ import { cartCount, useCartStore } from "@/store/cart";
 
 const navItems = [
   { href: "/", label: "Home", icon: House },
-  { href: "/products", label: "Categories", icon: LayoutGrid },
+  { href: "/#products", label: "Categories", icon: LayoutGrid },
 ] as const;
 
 export function MobileDock() {

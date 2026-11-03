@@ -11,7 +11,15 @@ function formatWhen(value: string) {
   return date.toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-export function AdminJobApplications({ applications }: { applications: JobApplication[] }) {
+export function AdminJobApplications({
+  applications,
+  title = "Open applications",
+  hint = "CVs sent from the careers page. Review, download, or delete.",
+}: {
+  applications: JobApplication[]
+  title?: string
+  hint?: string
+}) {
   const router = useRouter()
   const [filter, setFilter] = useState<'all' | 'new' | 'reviewed'>('all')
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -61,8 +69,8 @@ export function AdminJobApplications({ applications }: { applications: JobApplic
     <div className="admin-card">
       <div className="card-title">
         <div>
-          <h3>Open applications</h3>
-          <span>CVs sent from the careers page. Review, download, or delete.</span>
+          <h3>{title}</h3>
+          <span>{hint}</span>
         </div>
         <small className="page-status">{newCount} new</small>
       </div>
@@ -91,7 +99,7 @@ export function AdminJobApplications({ applications }: { applications: JobApplic
                     {item.fullName}
                     {item.status === 'new' ? <em className="admin-status-badge">New</em> : <em className="admin-status-badge">Reviewed</em>}
                   </b>
-                  <small>{item.department} · {item.workingTerms} · {formatWhen(item.createdAt)}</small>
+                  <small>{[item.jobTitle, item.department, item.workingTerms, formatWhen(item.createdAt)].filter(Boolean).join(" · ")}</small>
                 </div>
               </button>
               {open ? (

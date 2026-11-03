@@ -21,7 +21,7 @@ export function QuoteView() {
           <div className="mt-4 rounded-md border border-dashed border-line bg-surface p-6">
             <p className="text-ink">The basket is empty.</p>
             <p className="mt-2 text-sm text-muted">Add equipment from the catalogue, or describe a general requirement in the form.</p>
-            <Link href="/products" className="mt-4 inline-flex font-semibold text-brand">Browse products</Link>
+            <Link href="/#products" className="mt-4 inline-flex font-semibold text-brand">Browse products</Link>
           </div>
         ) : (
           <ul className="mt-4 divide-y divide-line rounded-md border border-line bg-surface">
