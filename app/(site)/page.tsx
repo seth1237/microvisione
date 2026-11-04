@@ -1,4 +1,5 @@
 import { WhySection } from "@/components/home/why-section";
+import { Reveal } from "@/components/motion/reveal";
 import { HomeCatalogue } from "@/components/home/home-catalogue";
 import { ManufacturerCarousel } from "@/components/home/manufacturer-carousel";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,11 @@ export default async function HomePage() {
     <>
       <section id="products" className="bg-[#F8FAFC] py-4 sm:py-8" aria-labelledby="products-heading">
         <div className="mx-auto w-full max-w-[1600px] px-3 sm:px-6 lg:px-8">
-          <h1 id="products-heading" className="text-xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
-            Products
-          </h1>
+          <Reveal>
+            <h1 id="products-heading" className="text-xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
+              Products
+            </h1>
+          </Reveal>
           <HomeCatalogue categories={categories} products={catalogue} />
         </div>
       </section>
@@ -32,16 +35,20 @@ export default async function HomePage() {
       <ManufacturerCarousel items={manufacturers} />
 
       <section className="bg-brand py-12 text-on-brand">
-        <Container className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <h2 className="text-3xl">Talk to Microvision</h2>
-            <p className="mt-2 max-w-xl text-on-brand/90">{site.address.full}. Phone {site.phoneDisplay}.</p>
-          </div>
-          <Button asChild variant="primary" size="lg">
-            <a href={whatsAppHref("Hello Microvision Enterprises Ltd, I would like to enquire about equipment.")}>
-              WhatsApp {site.phoneDisplay}
-            </a>
-          </Button>
+        <Container>
+          <Reveal>
+            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="text-3xl">Talk to Microvision</h2>
+                <p className="mt-2 max-w-xl text-on-brand/90">{site.address.full}. Phone {site.phoneDisplay}.</p>
+              </div>
+              <Button asChild variant="primary" size="lg">
+                <a href={whatsAppHref("Hello Microvision Enterprises Ltd, I would like to enquire about equipment.")}>
+                  WhatsApp {site.phoneDisplay}
+                </a>
+              </Button>
+            </div>
+          </Reveal>
         </Container>
       </section>
     </>

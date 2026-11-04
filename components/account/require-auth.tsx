@@ -5,30 +5,51 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((state) => state.user);
-  const [ready, setReady] = useState(false);
+  const signIn = useAuthStore((state) => state.signIn);
+  const signOut = useAuthStore((state) => state.signOut);
+  const [state, setState] = useState<"loading" | "in" | "out">("loading");
   const router = useRouter();
 
   useEffect(() => {
     let active = true;
-    const unsub = useAuthStore.persist.onFinishHydration(() => {
-      if (active) setReady(true);
-    });
-    void Promise.resolve(useAuthStore.persist.rehydrate()).then(() => {
-      if (active) setReady(true);
-    });
+    async function load() {
+      const response = await fetch("/api/account/me", { cache: "no-store" }).catch(() => null);
+      if (!active) return;
+      if (!response || response.status === 401) {
+        signOut();
+        setState("out");
+        router.replace("/account/login");
+        return;
+      }
+      if (!response.ok) {
+        setState("out");
+        return;
+      }
+      const payload = await response.json().catch(() => null);
+      const customer = payload?.data as { name?: string; facilityName?: string; email?: string; phone?: string } | undefined;
+      if (!customer?.email && !customer?.phone) {
+        signOut();
+        setState("out");
+        router.replace("/account/login");
+        return;
+      }
+      signIn({
+        name: customer.name || customer.email || "Client",
+        organisation: customer.facilityName || "",
+        role: "Client",
+        email: customer.email || "",
+        phone: customer.phone || "",
+      });
+      setState("in");
+    }
+    void load();
     return () => {
       active = false;
-      unsub();
     };
-  }, []);
+  }, [router, signIn, signOut]);
 
-  useEffect(() => {
-    if (ready && !user) router.replace("/account/login");
-  }, [ready, user, router]);
-
-  if (!ready || !user) {
-    return <p className="text-sm text-muted">Checking the demonstration session…</p>;
+  if (state !== "in") {
+    return <p className="text-sm text-muted">{state === "loading" ? "Checking your account…" : "Sign in to open this account."}</p>;
   }
 
   return children;

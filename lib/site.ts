@@ -19,6 +19,8 @@ export const site = {
     full: "Loipi Plaza, Lunga Lunga Road, Industrial Area, Nairobi, Kenya",
     mapsHref:
       "https://www.google.com/maps/search/?api=1&query=Loipi%20Plaza%20Lunga%20Lunga%20Road%20Industrial%20Area%20Nairobi",
+    mapsEmbed:
+      "https://maps.google.com/maps?q=Loipi%20Plaza%20Lunga%20Lunga%20Road%20Industrial%20Area%20Nairobi&z=16&output=embed",
   },
   hours: [
     { label: "Monday–Friday", value: "8:00–17:00 EAT" },

@@ -7,7 +7,7 @@ export const metadata = { title: "Sign in" };
 export default function LoginPage() {
   return (
     <Container className="py-8">
-      <PageIntro title="Sign in" lede="Use an email or a Kenyan phone number. This account stays in your browser." />
+      <PageIntro title="Sign in" lede="Enter your email. Microvision sends a login code, and this browser stays signed in." />
       <div className="mt-8">
         <LoginForm />
       </div>

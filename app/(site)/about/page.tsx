@@ -1,3 +1,4 @@
+import { Reveal } from "@/components/motion/reveal";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
 import { getCertificates } from "@/lib/api/content";
@@ -15,6 +16,7 @@ export default async function AboutPage() {
   return (
     <Container className="py-8">
       <PageIntro title="About Microvision" />
+      <Reveal>
       <div className="mt-8 max-w-3xl space-y-4 text-ink">
         <p>
           Microvision Enterprises Limited is a duly registered private company in Kenya since year 2008 with a key objective as importer and trader in medical equipment and related hospital supplies. We are stockists and distributors of mainly Laboratory and other categories of surgical and medical Equipment consumables. We procure quality and relevant equipment from reliable manufacturers worldwide.
@@ -31,6 +33,8 @@ export default async function AboutPage() {
           We see ourselves as the preferred suppliers of hospital equipment in the East Africa region and beyond with a large clientele of very satisfied customers that we share mutual benefit in business and as partners.
         </p>
       </div>
+      </Reveal>
+      <Reveal>
       <section className="mt-10" aria-labelledby="certs">
         <h2 id="certs" className="text-2xl">Certificates, licences and memberships</h2>
         <p className="mt-2 text-sm text-muted">Memberships are not listed because none have been confirmed for publication.</p>
@@ -52,6 +56,7 @@ export default async function AboutPage() {
           })}
         </ul>
       </section>
+      </Reveal>
     </Container>
   );
 }

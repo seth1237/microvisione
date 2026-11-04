@@ -54,7 +54,7 @@ type SiteSettings = {
   updatedAt: Date
 }
 
-const MYSQL_SCHEMA_VERSION = 16
+const MYSQL_SCHEMA_VERSION = 17
 
 type MysqlState = {
   pool: Pool | null
@@ -541,6 +541,36 @@ async function applyMysqlSchema() {
       PRIMARY KEY (id),
       UNIQUE KEY customer_product (customer_id, product_id),
       KEY customer_updated (customer_id, updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await mysqlAddColumnIfMissing('accord_nx_customers', 'email', `email VARCHAR(191) NULL`)
+  await pool.query(`ALTER TABLE accord_nx_customers MODIFY phone VARCHAR(32) NULL`)
+  await pool.query(`UPDATE accord_nx_customers SET email = NULL WHERE email = ''`)
+  await pool.query(`CREATE UNIQUE INDEX customer_email ON accord_nx_customers (email)`).catch((error: { code?: string }) => {
+    if (error?.code !== 'ER_DUP_KEYNAME') throw error
+  })
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_login_codes (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      email VARCHAR(191) NOT NULL,
+      code_hash CHAR(64) NOT NULL,
+      expires_at DATETIME NOT NULL,
+      attempts INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY email_created (email, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accord_nx_account_documents (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      customer_id INT UNSIGNED NOT NULL,
+      title VARCHAR(191) NOT NULL,
+      filename VARCHAR(255) NOT NULL,
+      file_id INT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL,
+      PRIMARY KEY (id),
+      KEY customer_created (customer_id, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   `)
 }
@@ -2015,6 +2045,7 @@ function mapCustomer(row: RowDataPacket): CustomerAccount {
     name: String(row.name || ''),
     facilityName: String(row.facility_name || ''),
     phone: String(row.phone || ''),
+    email: String(row.email || ''),
     location: String(row.location || ''),
     createdAt: iso(row.created_at),
     lastSeenAt: iso(row.last_seen_at),
@@ -2070,6 +2101,178 @@ export async function mysqlCreateCustomer(input: {
     if (code === 'ER_DUP_ENTRY') throw new Error('An account with this phone number already exists. Sign in instead.')
     throw error
   }
+}
+
+export async function mysqlGetCustomerByEmail(email: string) {
+  const normalized = String(email || '').trim().toLowerCase()
+  if (!normalized) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT * FROM accord_nx_customers WHERE email = ? LIMIT 1',
+    [normalized],
+  )
+  return rows[0] ? mapCustomer(rows[0]) : null
+}
+
+export async function mysqlEnsureCustomerByEmail(email: string) {
+  const normalized = String(email || '').trim().toLowerCase()
+  const existing = await mysqlGetCustomerByEmail(normalized)
+  if (existing) return existing
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  const name = normalized.split('@')[0]?.replace(/[._+-]+/g, ' ').trim().slice(0, 191) || 'Client'
+  try {
+    const [result] = await pool.query<ResultSetHeader>(
+      `INSERT INTO accord_nx_customers
+        (name, facility_name, phone, email, location, created_at, updated_at, last_seen_at)
+       VALUES (?, '', NULL, ?, '', ?, ?, ?)`,
+      [name, normalized, now, now, now],
+    )
+    const customer = await mysqlGetCustomerById(String(result.insertId))
+    if (!customer) throw new Error('Could not create account')
+    return customer
+  } catch (error) {
+    const code = (error as { code?: string }).code
+    if (code === 'ER_DUP_ENTRY') {
+      const again = await mysqlGetCustomerByEmail(normalized)
+      if (again) return again
+    }
+    throw error
+  }
+}
+
+export async function mysqlCountRecentLoginCodes(email: string, since: Date) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT COUNT(*) AS n FROM accord_nx_login_codes WHERE email = ? AND created_at > ?',
+    [email, since],
+  )
+  return Number(rows[0]?.n) || 0
+}
+
+export async function mysqlReplaceLoginCode(input: { email: string; codeHash: string; expiresAt: Date }) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const now = new Date()
+  await pool.query('DELETE FROM accord_nx_login_codes WHERE created_at < ?', [new Date(now.getTime() - 60 * 60 * 1000)])
+  await pool.query(
+    'INSERT INTO accord_nx_login_codes (email, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)',
+    [input.email, input.codeHash, input.expiresAt, now],
+  )
+}
+
+export async function mysqlTakeLoginCode(email: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, code_hash, expires_at, attempts FROM accord_nx_login_codes WHERE email = ? ORDER BY id DESC LIMIT 1',
+    [email],
+  )
+  const row = rows[0]
+  if (!row) return null
+  return {
+    id: Number(row.id),
+    codeHash: String(row.code_hash || ''),
+    expiresAt: row.expires_at instanceof Date ? row.expires_at : new Date(String(row.expires_at)),
+    attempts: Number(row.attempts) || 0,
+  }
+}
+
+export async function mysqlBumpLoginCodeAttempt(id: number) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query('UPDATE accord_nx_login_codes SET attempts = attempts + 1 WHERE id = ?', [id])
+}
+
+export async function mysqlDeleteLoginCodes(email: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  await pool.query('DELETE FROM accord_nx_login_codes WHERE email = ?', [email])
+}
+
+export async function mysqlInsertAccountDocument(input: {
+  customerId: string
+  title: string
+  filename: string
+  fileId: number
+}) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [result] = await pool.query<ResultSetHeader>(
+    `INSERT INTO accord_nx_account_documents (customer_id, title, filename, file_id, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [Number(input.customerId), input.title, input.filename, input.fileId, new Date()],
+  )
+  return result.insertId
+}
+
+export async function mysqlListAccountDocuments(customerId: string) {
+  const id = Number(customerId) || 0
+  if (!id) return []
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, title, filename, created_at FROM accord_nx_account_documents
+     WHERE customer_id = ? ORDER BY created_at DESC`,
+    [id],
+  )
+  return rows.map((row) => ({
+    id: String(row.id),
+    title: String(row.title || ''),
+    filename: String(row.filename || ''),
+    createdAt: iso(row.created_at),
+  }))
+}
+
+export async function mysqlListAllAccountDocuments() {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT d.id, d.title, d.filename, d.created_at, c.email
+     FROM accord_nx_account_documents d
+     JOIN accord_nx_customers c ON c.id = d.customer_id
+     ORDER BY d.created_at DESC
+     LIMIT 200`,
+  )
+  return rows.map((row) => ({
+    id: String(row.id),
+    title: String(row.title || ''),
+    filename: String(row.filename || ''),
+    createdAt: iso(row.created_at),
+    email: String(row.email || ''),
+  }))
+}
+
+export async function mysqlGetAccountDocument(id: string) {
+  const documentId = Number(id) || 0
+  if (!documentId) return null
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, customer_id, title, filename, file_id FROM accord_nx_account_documents WHERE id = ? LIMIT 1',
+    [documentId],
+  )
+  const row = rows[0]
+  if (!row) return null
+  return {
+    id: String(row.id),
+    customerId: String(row.customer_id),
+    title: String(row.title || ''),
+    filename: String(row.filename || ''),
+    fileId: Number(row.file_id),
+  }
+}
+
+export async function mysqlDeleteAccountDocument(id: string) {
+  const document = await mysqlGetAccountDocument(id)
+  if (!document) return null
+  const pool = await getPool()
+  await pool.query('DELETE FROM accord_nx_account_documents WHERE id = ?', [Number(document.id)])
+  if (document.fileId) await mysqlDeleteFile(String(document.fileId)).catch(() => undefined)
+  return document
 }
 
 export async function mysqlTouchCustomer(id: string) {

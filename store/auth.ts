@@ -21,6 +21,3 @@ export const useAuthStore = create<AuthState>()(
     { name: "mv-account", storage: persistedStorage<AuthState>(), skipHydration: true },
   ),
 );
-
-/** Demonstration one-time code. No SMS or email is sent. */
-export const DEMO_OTP = "000000";

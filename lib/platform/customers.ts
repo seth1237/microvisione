@@ -3,9 +3,18 @@ export type CustomerAccount = {
   name: string
   facilityName: string
   phone: string
+  email: string
   location: string
   createdAt: string
   lastSeenAt?: string
+}
+
+export type AccountDocument = {
+  id: string
+  title: string
+  filename: string
+  createdAt: string
+  email?: string
 }
 
 export type CustomerInterestProduct = {

@@ -71,7 +71,7 @@ export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boole
           value={term}
           autoFocus={autoFocus}
           placeholder="Search analyzers, meters, brands"
-          className="h-11 w-full rounded-md border border-line bg-surface pr-3 pl-9 text-sm"
+          className="h-11 w-full rounded-md border border-line bg-surface pr-3 pl-9 text-base"
           onChange={(event) => {
             setTerm(event.target.value);
             setOpen(true);

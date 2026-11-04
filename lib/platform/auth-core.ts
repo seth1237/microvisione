@@ -123,24 +123,27 @@ export function customerCookieOptions() {
   }
 }
 
-export function createCustomerSessionValue(input: { id: string; phone: string; name: string }) {
+export function createCustomerSessionValue(input: { id: string; phone: string; name: string; email?: string }) {
   const payload = Buffer.from(JSON.stringify({
     id: String(input.id),
-    phone: String(input.phone),
+    phone: String(input.phone || ''),
+    email: String(input.email || '').trim().toLowerCase(),
     name: String(input.name || '').slice(0, 80),
     exp: Date.now() + CUSTOMER_SESSION_DAYS * 24 * 60 * 60 * 1000,
   })).toString('base64url')
   return signValue(payload)
 }
 
-export function parseCustomerSessionValue(token: string | undefined | null): { id: string; phone: string; name: string } | null {
+export function parseCustomerSessionValue(token: string | undefined | null): { id: string; phone: string; name: string; email: string } | null {
   if (!token) return null
   const payload = verifySignedValue(token)
   if (!payload) return null
   try {
-    const data = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { id?: string; phone?: string; name?: string; exp?: number }
-    if (!data.id || !data.phone || !data.exp || data.exp < Date.now()) return null
-    return { id: String(data.id), phone: String(data.phone), name: String(data.name || '') }
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString()) as { id?: string; phone?: string; email?: string; name?: string; exp?: number }
+    const phone = String(data.phone || '')
+    const email = String(data.email || '').trim().toLowerCase()
+    if (!data.id || (!phone && !email) || !data.exp || data.exp < Date.now()) return null
+    return { id: String(data.id), phone, email, name: String(data.name || '') }
   } catch {
     return null
   }

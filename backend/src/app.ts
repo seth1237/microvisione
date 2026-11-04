@@ -121,13 +121,14 @@ import {
   replaceProductCheckout,
   startCheckout,
 } from '../../lib/platform/checkout-data'
-import { getCustomerAccount, listAccountOrders, listAccountInterest, listAccountPurchases, listClientInterestBoard, loginCustomer, recordCustomerInterest, registerCustomer } from '../../lib/platform/account-data'
+import { addAccountDocument, getCustomerAccount, listAccountOrders, listAccountInterest, listAccountPurchases, listClientInterestBoard, listCustomerDocuments, listUploadedAccountDocuments, readCustomerDocument, recordCustomerInterest, registerCustomer, removeUploadedAccountDocument, requestCustomerLoginCode, verifyCustomerLoginCode } from '../../lib/platform/account-data'
 import medtrackRoutes from './medtrack-routes'
 
 const CORS_ORIGINS = new Set([
   'https://accordmedical.co.ke',
   'https://www.accordmedical.co.ke',
   'https://accordwebsite.vercel.app',
+  'https://microvision.codewithseth.co.ke',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ])
@@ -190,7 +191,7 @@ function requireCustomer(c: Parameters<typeof customerSessionFrom>[0]) {
   return { session }
 }
 
-function writeCustomerSession(c: Parameters<typeof setCookie>[0], customer: { id: string; phone: string; name: string }) {
+function writeCustomerSession(c: Parameters<typeof setCookie>[0], customer: { id: string; phone: string; name: string; email?: string }) {
   setCookie(c, CUSTOMER_COOKIE, createCustomerSessionValue(customer), customerCookieOptions())
 }
 
@@ -417,7 +418,7 @@ app.get('/api/redirects/lookup', async (c) => {
 app.get('/api/media/file/:id', async (c) => {
   try {
     const file = await mysqlGetFile(c.req.param('id'))
-    if (!file) return c.json({ success: false, message: 'File not found' }, 404)
+    if (!file || file.kind === 'account-document') return c.json({ success: false, message: 'File not found' }, 404)
     return new Response(new Uint8Array(file.data), {
       headers: {
         'Content-Type': file.mime || 'application/octet-stream',
@@ -651,12 +652,95 @@ app.post('/api/account/register', async (c) => {
   }
 })
 
+app.post('/api/account/login/code', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}))
+    const data = await requestCustomerLoginCode(body.email)
+    return c.json({ success: true, data })
+  } catch (error) {
+    return c.json({ success: false, message: databaseErrorMessage(error) }, 400)
+  }
+})
+
 app.post('/api/account/login', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}))
-    const customer = await loginCustomer(body.phone)
+    const customer = await verifyCustomerLoginCode(body.email, body.code)
     writeCustomerSession(c, customer)
     return c.json({ success: true, data: customer })
+  } catch (error) {
+    return c.json({ success: false, message: databaseErrorMessage(error) }, 400)
+  }
+})
+
+app.get('/api/account/documents', async (c) => {
+  const auth = requireCustomer(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  try {
+    const documents = await listCustomerDocuments(auth.session.id)
+    return c.json({ success: true, data: documents })
+  } catch (error) {
+    return c.json({ success: false, message: databaseErrorMessage(error) }, 400)
+  }
+})
+
+app.get('/api/account/documents/:id/file', async (c) => {
+  const auth = requireCustomer(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  try {
+    const file = await readCustomerDocument(auth.session.id, c.req.param('id'))
+    if (!file) return c.json({ success: false, message: 'Document not found' }, 404)
+    const filename = file.filename.replace(/[\r\n"]/g, '') || 'document'
+    return new Response(new Uint8Array(file.data), {
+      headers: {
+        'Content-Type': file.mime || 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'private, no-store',
+      },
+    })
+  } catch (error) {
+    return c.json({ success: false, message: databaseErrorMessage(error) }, 400)
+  }
+})
+
+app.get('/api/admin/account-documents', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  try {
+    return c.json({ success: true, data: await listUploadedAccountDocuments() })
+  } catch (error) {
+    return c.json({ success: false, message: databaseErrorMessage(error) }, 400)
+  }
+})
+
+app.post('/api/admin/account-documents', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  try {
+    const form = await c.req.formData()
+    const upload = form.get('file')
+    if (!(upload instanceof File) || upload.size <= 0) {
+      return c.json({ success: false, message: 'Choose a document' }, 400)
+    }
+    const data = await addAccountDocument({
+      email: formText(form, 'email'),
+      title: formText(form, 'title'),
+      filename: upload.name,
+      mime: upload.type,
+      buffer: Buffer.from(await upload.arrayBuffer()),
+    })
+    return c.json({ success: true, data })
+  } catch (error) {
+    return c.json({ success: false, message: databaseErrorMessage(error) }, 400)
+  }
+})
+
+app.delete('/api/admin/account-documents/:id', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  try {
+    await removeUploadedAccountDocument(c.req.param('id'))
+    return c.json({ success: true })
   } catch (error) {
     return c.json({ success: false, message: databaseErrorMessage(error) }, 400)
   }

@@ -35,8 +35,11 @@ export function AccountNav() {
         type="button"
         className="text-sm font-semibold text-accent"
         onClick={() => {
-          signOut();
-          router.push("/account/login");
+          void fetch("/api/account/logout", { method: "POST" }).finally(() => {
+            signOut();
+            router.push("/account/login");
+            router.refresh();
+          });
         }}
       >
         Sign out{user ? ` (${user.name})` : ""}
