@@ -125,9 +125,9 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
         <section className="mt-12" aria-labelledby="related-heading">
           <h2 id="related-heading" className="text-2xl">Related products</h2>
           <ul className="mt-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
-            {related.map((item) => (
+            {related.map((item, index) => (
               <li key={item.id}>
-                <ProductCard product={item} />
+                <ProductCard product={item} index={index} />
               </li>
             ))}
           </ul>

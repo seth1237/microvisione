@@ -40,9 +40,9 @@ async function BrandContent({ params }: { params: Promise<{ slug: string }> }) {
     <Container className="py-8">
       <PageIntro title={brand.name} lede={brand.description && !/tbc/i.test(brand.description) ? brand.description : `${brand.count} products`} />
       <ul className="mt-8 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
-        {products.map((product) => (
+        {products.map((product, index) => (
           <li key={product.id}>
-            <ProductCard product={product} />
+            <ProductCard product={product} index={index} />
           </li>
         ))}
       </ul>

@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { ShoppingCart, MessageCircle } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 
 import { CategoryGlyph } from "@/components/product/category-glyph";
 import { ProductVisual } from "@/components/product/product-visual";
@@ -56,6 +59,10 @@ function flyToCart(source: HTMLElement) {
   };
 }
 
+const REVEAL_S = 0.6;
+const STAGGER_S = 0.07;
+const ROW = 5;
+
 function chipText(value: string) {
   const text = value.trim();
   if (!text) return "";
@@ -67,11 +74,35 @@ function chipText(value: string) {
 export function ProductCard({
   product,
   layout = "grid",
+  index = 0,
 }: {
   product: Product;
   layout?: "grid" | "list";
+  index?: number;
 }) {
   const addToCart = useCartStore((state) => state.add);
+  const reduceMotion = useReducedMotion();
+  const cardRef = useRef<HTMLElement>(null);
+  const [inView, setInView] = useState(false);
+  const [photoFailed, setPhotoFailed] = useState(false);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    const node = cardRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setInView(true);
+        observer.disconnect();
+      },
+      { threshold: 0.2 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [reduceMotion]);
+
+  const revealed = Boolean(reduceMotion) || inView;
   const { brands, categories } = useCatalogue();
 
   const brandName =
@@ -112,17 +143,31 @@ export function ProductCard({
     flyToCart(event.currentTarget);
   }
 
+  const photo = product.photoUrl && !photoFailed ? product.photoUrl : "";
+
   return (
-    <article
-      className={cn(
-        "group relative flex h-full min-w-0 flex-col overflow-hidden",
-        "rounded-xl border border-slate-200 bg-white",
-        "transition-[border-color,box-shadow] duration-200",
-        "hover:border-slate-300 hover:shadow-md",
-        "focus-within:ring-2 focus-within:ring-[#1211bb]/25",
-        isList && "sm:flex-row"
-      )}
+    <motion.article
+      ref={cardRef}
+      initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+      animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
+      transition={{
+        duration: revealed && !reduceMotion ? REVEAL_S : 0,
+        delay: revealed && !reduceMotion ? (index % ROW) * STAGGER_S : 0,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+      className="h-full"
     >
+      <div
+        className={cn(
+          "group relative flex h-full min-w-0 flex-col overflow-hidden",
+          "rounded-xl border border-slate-200 bg-white",
+          "transition-[transform,box-shadow,border-color] duration-300 ease-out",
+          "hover:-translate-y-1 hover:border-slate-300 hover:shadow-[0_14px_30px_rgba(15,23,42,0.10)]",
+          "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+          "focus-within:ring-2 focus-within:ring-[#1211bb]/25",
+          isList && "sm:flex-row"
+        )}
+      >
       {/* Image */}
       <div
         className={cn(
@@ -137,21 +182,27 @@ export function ProductCard({
           aria-label={`View ${product.name}`}
           className="absolute inset-0 z-[1]"
         />
-        <div className="absolute inset-0 flex items-center justify-center p-4">
-          {product.photoUrl ? (
-            <img
-              src={product.photoUrl}
-              alt={product.name}
-              loading="lazy"
-              className="h-full w-full object-contain"
-            />
-          ) : (
-            <ProductVisual
-              name={product.name}
-              variant="primary"
-              className="h-full w-full"
-            />
-          )}
+        <div className="absolute inset-3 sm:inset-4">
+          <div className="relative h-full w-full">
+            {photo ? (
+              <Image
+                src={photo}
+                alt={product.name}
+                fill
+                sizes={isList ? "(max-width: 640px) 100vw, 240px" : "(max-width: 640px) 50vw, (max-width: 1280px) 25vw, 20vw"}
+                className="object-contain transition-transform duration-[400ms] ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                onError={() => setPhotoFailed(true)}
+              />
+            ) : (
+              <div className="h-full w-full transition-transform duration-[400ms] ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+                <ProductVisual
+                  name={product.name}
+                  variant="primary"
+                  className="h-full w-full"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -240,7 +291,8 @@ export function ProductCard({
           </div>
         </div>
       </div>
-    </article>
+      </div>
+    </motion.article>
   );
 }
 

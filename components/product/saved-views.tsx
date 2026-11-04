@@ -23,9 +23,9 @@ export function WishlistView() {
 
   return (
     <ul className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
-      {saved.map((product) => (
+      {saved.map((product, index) => (
         <li key={product.id}>
-          <ProductCard product={product} />
+          <ProductCard product={product} index={index} />
         </li>
       ))}
     </ul>

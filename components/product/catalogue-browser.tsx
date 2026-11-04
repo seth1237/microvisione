@@ -157,9 +157,9 @@ export async function CatalogueBrowser({
             </div>
           ) : (
             <ul className={result && linkQuery.view === "list" ? "space-y-4" : "grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5"}>
-              {result.items.map((product) => (
+              {result.items.map((product, index) => (
                 <li key={product.id}>
-                  <ProductCard product={product} layout={linkQuery.view === "list" ? "list" : "grid"} />
+                  <ProductCard product={product} index={index} layout={linkQuery.view === "list" ? "list" : "grid"} />
                 </li>
               ))}
             </ul>

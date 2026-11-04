@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ProductCard } from "@/components/product/product-card";
 import { CategoryGlyph } from "@/components/product/category-glyph";
 import { cn } from "@/lib/utils/cn";
@@ -19,6 +20,7 @@ export function HomeCatalogue({
 }) {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const reduceMotion = useReducedMotion();
 
   const filtered = useMemo(
     () => (categoryId ? products.filter((product) => product.categoryId === categoryId) : products),
@@ -42,13 +44,22 @@ export function HomeCatalogue({
         className="sticky top-36 hidden lg:block"
       />
       <div className="min-w-0">
-        <ul className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
-          {shown.map((product) => (
-            <li key={product.id} className="min-w-0">
-              <ProductCard product={product} />
-            </li>
-          ))}
-        </ul>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.ul
+            key={categoryId ?? "all"}
+            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5"
+          >
+            {shown.map((product, index) => (
+              <li key={product.id} className="min-w-0">
+                <ProductCard product={product} index={index} />
+              </li>
+            ))}
+          </motion.ul>
+        </AnimatePresence>
         {shown.length === 0 ? (
           <p className="mt-6 text-sm text-muted">No products in this category yet.</p>
         ) : null}

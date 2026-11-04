@@ -25,8 +25,14 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   images: {
     dangerouslyAllowSVG: true,
+    dangerouslyAllowLocalIP: true,
     contentDispositionType: "attachment",
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    remotePatterns: [
+      { protocol: "https", hostname: "micro.codewithseth.co.ke", pathname: "/api/media/**" },
+      { protocol: "http", hostname: "127.0.0.1", port: "4000", pathname: "/api/media/**" },
+      { protocol: "http", hostname: "localhost", port: "4000", pathname: "/api/media/**" },
+    ],
   },
   turbopack: {
     rules: {
