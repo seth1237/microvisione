@@ -1,8 +1,7 @@
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { CatalogueBrowser } from "@/components/product/catalogue-browser";
-import { ProductCardSkeleton } from "@/components/product/product-card";
-import { getCategories, getCategoryBySlug } from "@/lib/api/products";
+import { HomeCatalogue } from "@/components/home/home-catalogue";
+import { Reveal } from "@/components/motion/reveal";
+import { getCategories, getCategoryBySlug, getProducts } from "@/lib/api/products";
 import { catalogueMetadata } from "@/lib/seo";
 
 export async function generateStaticParams() {
@@ -12,10 +11,8 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
@@ -24,49 +21,44 @@ export async function generateMetadata({
     basePath: `/category/${category.slug}`,
     title: `${category.name} in Kenya`,
     description: category.description,
-    searchParams,
+    searchParams: Promise.resolve({}),
     lockedCategory: category.slug,
   });
 }
 
-export default function CategoryPage({
+export default async function CategoryPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  return (
-    <Suspense
-      fallback={
-        <div className="mx-auto grid max-w-6xl grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5 px-3 py-8 sm:px-6">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <ProductCardSkeleton key={index} />
-          ))}
-        </div>
-      }
-    >
-      <CategoryContent params={params} searchParams={searchParams} />
-    </Suspense>
-  );
-}
-
-async function CategoryContent({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
-  const category = await getCategoryBySlug(slug);
+  const [category, categories, products] = await Promise.all([
+    getCategoryBySlug(slug),
+    getCategories(),
+    getProducts(),
+  ]);
   if (!category) notFound();
+  const catalogue = [
+    ...products.filter((product) => product.featured),
+    ...products.filter((product) => !product.featured),
+  ];
+
   return (
-    <CatalogueBrowser
-      searchParams={searchParams}
-      lockedCategory={category.slug}
-      heading={category.name}
-      intro={category.description}
-    />
+    <section className="bg-[#F8FAFC] py-4 sm:py-8" aria-labelledby="category-heading">
+      <div className="mx-auto w-full max-w-[1600px] px-3 sm:px-6 lg:px-8">
+        <Reveal>
+          <h1 id="category-heading" className="text-xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
+            {category.name}
+          </h1>
+        </Reveal>
+        <HomeCatalogue
+          categories={categories}
+          products={catalogue}
+          initialCategoryId={category.id}
+          activeSlug={category.slug}
+          categoryLinks
+        />
+      </div>
+    </section>
   );
 }

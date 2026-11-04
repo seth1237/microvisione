@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ProductCard } from "@/components/product/product-card";
@@ -14,13 +15,25 @@ const PAGE_SIZE = 12;
 export function HomeCatalogue({
   categories,
   products,
+  initialCategoryId = null,
+  activeSlug = "",
+  categoryLinks = false,
 }: {
   categories: CategoryWithCount[];
   products: Product[];
+  initialCategoryId?: string | null;
+  activeSlug?: string;
+  categoryLinks?: boolean;
 }) {
-  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const router = useRouter();
+  const [categoryId, setCategoryId] = useState<string | null>(initialCategoryId);
   const [visible, setVisible] = useState(PAGE_SIZE);
   const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    setCategoryId(initialCategoryId);
+    setVisible(PAGE_SIZE);
+  }, [initialCategoryId]);
 
   const filtered = useMemo(
     () => (categoryId ? products.filter((product) => product.categoryId === categoryId) : products),
@@ -30,6 +43,15 @@ export function HomeCatalogue({
   const remaining = filtered.length - shown.length;
 
   function selectCategory(id: string | null) {
+    if (categoryLinks) {
+      if (!id) {
+        router.push("/");
+        return;
+      }
+      const category = categories.find((item) => item.id === id);
+      if (category) router.push(`/category/${category.slug}`);
+      return;
+    }
     setCategoryId(id);
     setVisible(PAGE_SIZE);
   }
@@ -40,6 +62,7 @@ export function HomeCatalogue({
         categories={categories}
         products={products}
         activeId={categoryId}
+        activeSlug={activeSlug}
         onSelect={selectCategory}
         className="sticky top-36 hidden lg:block"
       />
@@ -83,6 +106,7 @@ function CategorySidebar({
   categories,
   products,
   activeId,
+  activeSlug = "",
   onSelect,
   showTitle = true,
   className,
@@ -90,6 +114,7 @@ function CategorySidebar({
   categories: CategoryWithCount[];
   products: Product[];
   activeId: string | null;
+  activeSlug?: string;
   onSelect: (id: string | null) => void;
   showTitle?: boolean;
   className?: string;
@@ -120,8 +145,8 @@ function CategorySidebar({
           const open = expanded === category.id;
           const active = activeId === category.id;
           return (
-            <div key={category.id} className="border-b border-line last:border-0">
-              <div className={cn("flex items-stretch", active && "bg-brand text-on-brand")}>
+            <div key={category.slug} className="border-b border-line last:border-0">
+              <div className={cn("flex items-stretch", (activeSlug ? category.slug === activeSlug : active) && "bg-brand text-on-brand")}>
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left text-[13px] font-semibold"
