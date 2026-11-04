@@ -209,6 +209,17 @@ export async function catalogueAnalytics() {
   }
 }
 
+export function categoryActivity<T extends { categoryId: string; categoryName: string }>(
+  rows: T[],
+  category: { _id: string; slug: string; name: string },
+) {
+  return rows.find((row) =>
+    row.categoryId === category._id
+    || row.categoryId === category.slug
+    || (row.categoryName && row.categoryName === category.name),
+  )
+}
+
 export async function getCategoryPerformance() {
   const payload = await backendJson<{ data: Awaited<ReturnType<typeof import('@/lib/platform/mongodb').getCategoryPerformance>> }>('/api/admin/performance')
   return payload?.data || []

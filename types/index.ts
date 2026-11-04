@@ -126,6 +126,8 @@ export interface CatalogueEvent {
   summary: string;
   body: string;
   coverUrl?: string;
+  registrationUrl?: string;
+  blocks?: import("@/lib/platform/event-body").EventBlock[];
   isPlaceholder?: true;
 }
 
@@ -315,4 +317,5 @@ export interface CatalogueBundle {
   offers: Offer[];
   events: CatalogueEvent[];
   searchIndex: SearchHit[];
+  showPrices: boolean;
 }

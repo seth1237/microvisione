@@ -4,6 +4,7 @@ import { cacheLife } from "next/cache";
 import { brands as knownBrands } from "@/data/brands";
 import { categories as knownCategories } from "@/data/categories";
 import { accordApiPath, catalogueApiSelected, publicAssetUrl } from "@/lib/platform/backend-url";
+import { parseEventBody } from "@/lib/platform/event-body";
 import type { BrandWithCount, CatalogueEvent, CategoryWithCount, Job, Offer, Product, SearchHit } from "@/types";
 
 type LiveProduct = {
@@ -54,6 +55,8 @@ type LiveEvent = {
   startAt?: string;
   createdAt: string;
   location?: string;
+  registrationUrl?: string;
+  body?: unknown;
   cover?: { secureUrl?: string };
 };
 
@@ -219,6 +222,12 @@ export async function liveEvents(): Promise<CatalogueEvent[] | null> {
     summary: event.description,
     body: event.description,
     coverUrl: publicAssetUrl(event.cover?.secureUrl),
+    registrationUrl: event.registrationUrl || "",
+    blocks: parseEventBody(event.body).map((block) =>
+      block.type === "image"
+        ? { ...block, image: { ...block.image, secureUrl: publicAssetUrl(block.image.secureUrl) || block.image.secureUrl } }
+        : block,
+    ),
   }));
 }
 
@@ -252,6 +261,12 @@ function withPublicCover(item: LiveInstallation): LiveInstallation {
   const secureUrl = publicAssetUrl(item.cover?.secureUrl);
   if (!secureUrl || !item.cover) return item;
   return { ...item, cover: { ...item.cover, secureUrl } };
+}
+
+export async function liveCatalogues() {
+  if (!catalogueApiSelected()) return [];
+  const payload = await apiJson<{ data?: Array<{ _id: string; erpProductId: string; createdAt: string }> }>("/api/catalogues");
+  return payload?.data || [];
 }
 
 export async function liveInstallations(): Promise<LiveInstallation[]> {

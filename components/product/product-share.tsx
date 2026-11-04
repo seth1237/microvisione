@@ -2,14 +2,32 @@
 
 import { useState } from "react";
 import { Share2 } from "lucide-react";
+import { postShopEvent } from "@/lib/analytics/shop";
 
-export function ProductShare({ title, url }: { title: string; url: string }) {
+export function ProductShare({
+  title,
+  url,
+  productId,
+  categoryId,
+  categoryName,
+}: {
+  title: string;
+  url: string;
+  productId: string;
+  categoryId: string;
+  categoryName: string;
+}) {
   const [copied, setCopied] = useState(false);
+
+  function record() {
+    postShopEvent("/api/products/share", { productId, productName: title, categoryId, categoryName });
+  }
 
   async function share() {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({ title, url });
+        record();
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -18,6 +36,7 @@ export function ProductShare({ title, url }: { title: string; url: string }) {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
+      record();
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);

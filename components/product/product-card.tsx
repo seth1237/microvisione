@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ShoppingCart, MessageCircle } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
+import { postShopEvent } from "@/lib/analytics/shop";
 import { CategoryGlyph } from "@/components/product/category-glyph";
 import { ProductVisual } from "@/components/product/product-visual";
 import { useCatalogue } from "@/components/providers/catalogue-provider";
@@ -103,7 +104,7 @@ export function ProductCard({
   }, [reduceMotion]);
 
   const revealed = Boolean(reduceMotion) || inView;
-  const { brands, categories } = useCatalogue();
+  const { brands, categories, showPrices } = useCatalogue();
 
   const brandName =
     brands.find((brand) => brand.id === product.brandId)?.name ?? "Microvision";
@@ -126,7 +127,7 @@ export function ProductCard({
     .slice(0, isList ? 4 : 3);
 
   const showPrice = Boolean(
-    product.price && product.price > 0 && !product.priceIsPlaceholder
+    showPrices !== false && product.price && product.price > 0 && !product.priceIsPlaceholder
   );
 
   function onAdd(event: React.MouseEvent<HTMLButtonElement>) {
@@ -141,6 +142,12 @@ export function ProductCard({
       categoryId: product.categoryId,
     });
     flyToCart(event.currentTarget);
+    postShopEvent("/api/products/cart", {
+      productId: product.id,
+      productName: product.name,
+      categoryId: category?.slug || product.categoryId,
+      categoryName: category?.name || "",
+    });
   }
 
   const photo = product.photoUrl && !photoFailed ? product.photoUrl : "";

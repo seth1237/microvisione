@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
+import { ProductView } from "@/components/analytics/product-view";
 import { ProductCard } from "@/components/product/product-card";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductShare } from "@/components/product/product-share";
@@ -10,7 +11,8 @@ import { WhiteCanvas } from "@/components/product/white-canvas";
 import { JsonLd } from "@/components/seo/json-ld";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Container } from "@/components/ui/container";
-import { liveProductBySlug } from "@/lib/api/live-catalogue";
+import { liveCatalogues, liveProductBySlug } from "@/lib/api/live-catalogue";
+import { catalogueDownloadHref } from "@/lib/platform/content";
 import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
 import { absoluteUrl } from "@/lib/site";
 import type { Metadata } from "next";
@@ -61,14 +63,16 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
   const { slug } = await params;
   const product = await loadProduct(slug);
   if (!product) notFound();
-  const [brands, categories, related] = await Promise.all([
+  const [brands, categories, related, catalogues] = await Promise.all([
     getBrands(),
     getCategories(),
     getRelatedProducts(product),
+    liveCatalogues(),
   ]);
   const brand = brands.find((item) => item.id === product.brandId);
   const category = categories.find((item) => item.id === product.categoryId);
   const url = absoluteUrl(`/product/${product.slug}`);
+  const catalogueHref = catalogueDownloadHref({ id: product.id }, catalogues);
 
   return (
     <Container className="bg-white pt-8 pb-44 lg:py-8">
@@ -100,7 +104,20 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
             </p>
           ) : null}
         </div>
-        <ProductShare title={product.name} url={url} />
+        <div className="flex shrink-0 items-center gap-2">
+          {catalogueHref ? (
+            <a href={catalogueHref} className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-brand hover:text-brand">
+              View Catalogue
+            </a>
+          ) : null}
+          <ProductShare
+            title={product.name}
+            url={url}
+            productId={product.id}
+            categoryId={category?.slug || product.categoryId}
+            categoryName={category?.name || ""}
+          />
+        </div>
       </div>
       {product.features.filter((feature) => feature.trim() && !/tbc|placeholder/i.test(feature)).length ? (
         <ul className="mt-4 flex gap-2 overflow-x-auto">
@@ -133,6 +150,12 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           </ul>
         </section>
       ) : null}
+      <ProductView
+        productId={product.id}
+        productName={product.name}
+        categoryId={category?.slug || product.categoryId}
+        categoryName={category?.name || ""}
+      />
       <p className="mt-8 text-sm text-muted">
         <Link href="/legal/returns" className="font-semibold text-brand">Returns and warranty</Link>
       </p>

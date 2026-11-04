@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { Heart, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
+import { postShopEvent } from "@/lib/analytics/shop";
 import { PriceTag } from "@/components/product/price-tag";
+import { useCatalogue } from "@/components/providers/catalogue-provider";
 import { StockBadge } from "@/components/product/stock-badge";
 import { Button } from "@/components/ui/button";
 import { productWhatsAppMessage, whatsAppHref } from "@/lib/site";
@@ -19,6 +21,8 @@ export function PurchasePanel({
   product: Product;
   brandName: string;
 }) {
+  const { categories, showPrices } = useCatalogue();
+  const category = categories.find((entry) => entry.id === product.categoryId || entry.slug === product.categoryId);
   const addToQuote = useQuoteStore((state) => state.add);
   const toggleWish = useWishlistStore((state) => state.toggle);
   const wished = useWishlistStore((state) => state.ids.includes(product.id));
@@ -34,6 +38,12 @@ export function PurchasePanel({
       quantity: 1,
     });
     toast.success(`${product.name} added to the quote basket`);
+    postShopEvent("/api/products/cart", {
+      productId: product.id,
+      productName: product.name,
+      categoryId: category?.slug || product.categoryId,
+      categoryName: category?.name || "",
+    });
   }
 
   function onSave() {
@@ -46,7 +56,7 @@ export function PurchasePanel({
       <aside className="rounded-md border border-line bg-white p-5">
         {brandName && !/tbc/i.test(brandName) ? <p className="text-sm text-muted">{brandName}</p> : null}
         <div className="mt-2">
-          <PriceTag price={product.price} placeholder={product.priceIsPlaceholder} className="text-lg" />
+          <PriceTag price={showPrices === false ? undefined : product.price} placeholder={product.priceIsPlaceholder} className="text-lg" />
         </div>
         {product.stockIsPlaceholder ? null : (
           <div className="mt-3">

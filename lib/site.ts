@@ -1,6 +1,5 @@
 /**
  * Public company facts.
- * Opening hours are still an example until Microvision confirms them.
  */
 
 export const site = {
@@ -26,7 +25,7 @@ export const site = {
     { label: "Monday–Friday", value: "8:00–17:00 EAT" },
     { label: "Saturday", value: "8:00–13:00 EAT" },
   ],
-  hoursArePlaceholder: true,
+  hoursArePlaceholder: false,
   url: process.env.NEXT_PUBLIC_SITE_URL || "https://www.microvisione.com",
   locale: "en_KE",
   currency: "KES" as const,

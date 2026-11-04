@@ -2,7 +2,7 @@ export const instant = false
 
 import { BarChart3, Eye, MousePointerClick, Package, ShoppingCart } from 'lucide-react'
 import { productImageSrc } from '@/lib/platform/catalog'
-import { getCategoryPerformance, getFullCatalog, getVisitorStats } from '@/lib/platform/site-data'
+import { categoryActivity, getCategoryPerformance, getFullCatalog, getVisitorStats } from '@/lib/platform/site-data'
 
 export default async function AdminOverviewPage() {
   const [catalog, categoryPerformance, visitors] = await Promise.all([
@@ -12,16 +12,18 @@ export default async function AdminOverviewPage() {
   ])
   const totalClicks = catalog.products.reduce((sum, product) => sum + (product.clicks || 0), 0)
   const totalCarts = catalog.products.reduce((sum, product) => sum + (product.carts || 0), 0)
-  const byId = new Map(categoryPerformance.map((item) => [item.categoryId, item]))
   const categoryStats = catalog.categories
-    .map((category) => ({
-      id: category._id,
-      name: category.name,
-      productCount: category.count,
-      clicks: byId.get(category._id)?.clicks || 0,
-      shares: byId.get(category._id)?.shares || 0,
-      carts: byId.get(category._id)?.carts || 0,
-    }))
+    .map((category) => {
+      const stats = categoryActivity(categoryPerformance, category)
+      return {
+        id: category._id,
+        name: category.name,
+        productCount: category.count,
+        clicks: stats?.clicks || 0,
+        shares: stats?.shares || 0,
+        carts: stats?.carts || 0,
+      }
+    })
     .sort((a, b) => b.clicks - a.clicks)
     .slice(0, 6)
   const maxClicks = Math.max(1, ...categoryStats.map((row) => row.clicks))

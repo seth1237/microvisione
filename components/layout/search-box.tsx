@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
+import { sessionId, visitorId } from "@/lib/analytics/shop";
 import { useCatalogue } from "@/components/providers/catalogue-provider";
 import { cn } from "@/lib/utils/cn";
 
@@ -28,7 +29,16 @@ export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boole
     void fetch("/api/analytics/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, resultCount: matches.length, trigger, path: "/" }),
+      keepalive: true,
+      body: JSON.stringify({
+        query,
+        resultCount: matches.length,
+        trigger,
+        path: window.location.pathname,
+        visitorId: visitorId(),
+        sessionId: sessionId(),
+        productId: matches[active]?.id || "",
+      }),
     }).catch(() => undefined);
   }
 

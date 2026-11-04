@@ -6,6 +6,7 @@ import { certificates, jobs, services } from "@/data/content";
 import { offers } from "@/data/offers";
 import { products } from "@/data/products";
 import { liveEvents, liveJobs, liveOffers } from "@/lib/api/live-catalogue";
+import { accordApiPath, catalogueApiSelected, publicAssetUrl } from "@/lib/platform/backend-url";
 import type { CatalogueEvent, Job, Offer, Product } from "@/types";
 
 async function staticOffers(): Promise<Offer[]> {
@@ -43,6 +44,29 @@ export async function getServices() {
   "use cache";
   cacheLife("hours");
   return services;
+}
+
+export async function getCompanyProfilePages() {
+  "use cache";
+  cacheLife("minutes");
+  if (!catalogueApiSelected()) return [];
+  try {
+    const response = await fetch(accordApiPath("/api/company-profile"));
+    if (!response.ok) return [];
+    const payload = (await response.json()) as {
+      data?: Array<{ _id: string; title: string; body: string; image?: { secureUrl?: string } | null; published?: boolean }>;
+    };
+    return (payload.data || [])
+      .filter((page) => page.published !== false && page.title)
+      .map((page) => ({
+        id: page._id,
+        title: page.title,
+        body: page.body || "",
+        imageUrl: publicAssetUrl(page.image?.secureUrl),
+      }));
+  } catch {
+    return [];
+  }
 }
 
 export async function getCertificates() {

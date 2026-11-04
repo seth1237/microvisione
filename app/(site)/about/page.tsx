@@ -1,7 +1,7 @@
 import { Reveal } from "@/components/motion/reveal";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
-import { getCertificates } from "@/lib/api/content";
+import { getCertificates, getCompanyProfilePages } from "@/lib/api/content";
 import { site } from "@/lib/site";
 import { formatIsoDate, isPastIsoDate } from "@/lib/utils/format";
 
@@ -12,7 +12,7 @@ export const metadata = {
 };
 
 export default async function AboutPage() {
-  const certificates = await getCertificates();
+  const [certificates, profilePages] = await Promise.all([getCertificates(), getCompanyProfilePages()]);
   return (
     <Container className="py-8">
       <PageIntro title="About Microvision" />
@@ -34,6 +34,19 @@ export default async function AboutPage() {
         </p>
       </div>
       </Reveal>
+      {profilePages.length ? (
+        <Reveal>
+          <section className="mt-10 max-w-3xl space-y-8" aria-label="Company profile">
+            {profilePages.map((page) => (
+              <article key={page.id}>
+                <h2 className="text-2xl">{page.title}</h2>
+                {page.imageUrl ? <img src={page.imageUrl} alt="" className="mt-4 w-full rounded-md object-cover" /> : null}
+                {page.body ? <p className="mt-3 whitespace-pre-line">{page.body}</p> : null}
+              </article>
+            ))}
+          </section>
+        </Reveal>
+      ) : null}
       <Reveal>
       <section className="mt-10" aria-labelledby="certs">
         <h2 id="certs" className="text-2xl">Certificates, licences and memberships</h2>
