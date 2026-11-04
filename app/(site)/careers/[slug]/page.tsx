@@ -5,13 +5,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { JobApplyForm } from "@/components/forms/job-apply-form";
 import { Container } from "@/components/ui/container";
-import { getJobBySlug, getJobs } from "@/lib/api/content";
+import { getJobBySlug } from "@/lib/api/content";
 import type { Metadata } from "next";
-
-export async function generateStaticParams() {
-  const jobs = await getJobs();
-  return jobs.map((job) => ({ slug: job.slug }));
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

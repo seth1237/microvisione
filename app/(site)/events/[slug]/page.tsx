@@ -2,14 +2,11 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Container } from "@/components/ui/container";
-import { getEventBySlug, getEvents } from "@/lib/api/content";
+import { getEventBySlug } from "@/lib/api/content";
 import { formatIsoDate } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
-export async function generateStaticParams() {
-  const events = await getEvents();
-  return events.map((event) => ({ slug: event.slug }));
-}
+export const instant = false;
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
