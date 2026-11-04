@@ -1,40 +1,17 @@
-import { CertificationCarousel } from "@/components/home/certification-carousel";
+import { WhySection } from "@/components/home/why-section";
 import { HomeCatalogue } from "@/components/home/home-catalogue";
 import { ManufacturerCarousel } from "@/components/home/manufacturer-carousel";
-import { SiteGallery } from "@/components/home/site-gallery";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { liveCertifications } from "@/lib/api/certifications";
 import { getCategories, getProducts } from "@/lib/api/products";
-import { liveGallery, liveManufacturers } from "@/lib/api/site-media";
+import { liveManufacturers } from "@/lib/api/site-media";
 import { site, whatsAppHref } from "@/lib/site";
 
-const why = [
-  {
-    title: "Catalogue brands",
-    text: "Equipment is listed under the names used in the Microvision catalogue. Manufacturer authorisations are confirmed on request.",
-  },
-  {
-    title: "Installation and training",
-    text: "Setup and operator training can be requested with a quotation. A published training syllabus is still TBC.",
-  },
-  {
-    title: "After-sales service",
-    text: "Maintenance, calibration and biomedical support are available as separate service requests.",
-  },
-  {
-    title: "Delivery in Kenya",
-    text: "Delivery outside Nairobi is arranged per order. Coverage and lead times are confirmed on the quote, not published as a guarantee here.",
-  },
-];
-
 export default async function HomePage() {
-  const [categories, products, certifications, manufacturers, gallery] = await Promise.all([
+  const [categories, products, manufacturers] = await Promise.all([
     getCategories(),
     getProducts(),
-    liveCertifications(),
     liveManufacturers(),
-    liveGallery(),
   ]);
   const catalogue = [
     ...products.filter((product) => product.featured),
@@ -51,24 +28,8 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="bg-black py-12 text-on-dark" aria-labelledby="why-heading">
-        <Container>
-          <h2 id="why-heading" className="text-3xl">Why Microvision</h2>
-          <p className="mt-3 max-w-2xl text-sm text-on-dark/80">Placeholder copy — replace with approved service descriptions. No client counts are shown.</p>
-          <ul className="mt-6 grid gap-4 sm:grid-cols-2">
-            {why.map((item) => (
-              <li key={item.title} className="rounded-md border border-white/15 bg-white/10 p-4 backdrop-blur-md">
-                <h3 className="text-lg">{item.title}</h3>
-                <p className="mt-2 text-sm text-on-dark/80">{item.text}</p>
-              </li>
-            ))}
-          </ul>
-        </Container>
-      </section>
-
-      <CertificationCarousel logos={certifications} />
+      <WhySection />
       <ManufacturerCarousel items={manufacturers} />
-      <SiteGallery photos={gallery} />
 
       <section className="bg-brand py-12 text-on-brand">
         <Container className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">

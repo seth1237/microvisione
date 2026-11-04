@@ -16,7 +16,9 @@ export function SiteGallery({ photos }: { photos: PublicGalleryPhoto[] }) {
             </li>
           ))}
         </ul>
-        ) : null}
+        ) : (
+          <p className="mt-6 text-sm text-muted">No photographs yet.</p>
+        )}
       </div>
     </section>
   );

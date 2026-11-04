@@ -47,7 +47,7 @@ function verifySignedValue(token: string) {
 
 export async function ensureSeedAdmin() {
   if (!isMysqlConfigured() && !isMongoConfigured()) return
-  const email = (process.env.ADMIN_EMAIL || 'enquiries@microvisione.com').trim().toLowerCase()
+  const email = (process.env.ADMIN_EMAIL || 'info@microvisione.com').trim().toLowerCase()
   const username = (process.env.ADMIN_USERNAME || 'microvision').trim()
   const existing = (await getAdminByEmail(username).catch(() => null)) || (await getAdminByEmail(email).catch(() => null))
   if (!existing) {

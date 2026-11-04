@@ -21,6 +21,7 @@ const LIVE_PREFIXES = [
   "/account",
   "/checkout",
   "/brands",
+  "/gallery",
   "/compare",
   "/admin",
   "/api",

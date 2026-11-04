@@ -1,49 +1,35 @@
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
-import { PlaceholderNote } from "@/components/ui/placeholder-note";
 import { getCertificates } from "@/lib/api/content";
 import { site } from "@/lib/site";
 import { formatIsoDate, isPastIsoDate } from "@/lib/utils/format";
 
 export const metadata = {
   title: "About",
-  description: site.positioning,
+  description:
+    "Microvision Enterprises Limited is a registered private company in Kenya, importing and trading medical equipment and hospital supplies since 2008.",
 };
-
-const team = [
-  { role: "Managing director", name: "Name to be confirmed" },
-  { role: "Service lead", name: "Name to be confirmed" },
-  { role: "Sales lead", name: "Name to be confirmed" },
-];
 
 export default async function AboutPage() {
   const certificates = await getCertificates();
   return (
     <Container className="py-8">
-      <PageIntro title="About Microvision" lede={site.positioning} />
-      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <div className="space-y-4">
-          <h2 className="text-2xl">Our story</h2>
-          <PlaceholderNote>Approved company history is not on this page yet. Do not infer a founding year or a client list.</PlaceholderNote>
-          <p>
-            Microvision Enterprises Ltd supplies medical and laboratory equipment from {site.address.full}. Buyers are hospitals, clinics, laboratories, NGOs and other institutions.
-          </p>
-          <h2 className="pt-4 text-2xl">Mission</h2>
-          <p className="text-muted">
-            Placeholder: help facilities in Kenya specify, receive and keep diagnostic equipment in service, with quotations and after-sales support that match the instrument they actually buy.
-          </p>
-        </div>
-        <aside className="rounded-md border border-line bg-surface p-5">
-          <h2 className="text-xl">Team</h2>
-          <ul className="mt-4 space-y-3">
-            {team.map((person) => (
-              <li key={person.role} className="border-b border-line pb-3">
-                <p className="font-semibold">{person.role}</p>
-                <p className="text-sm text-muted">{person.name}</p>
-              </li>
-            ))}
-          </ul>
-        </aside>
+      <PageIntro title="About Microvision" />
+      <div className="mt-8 max-w-3xl space-y-4 text-ink">
+        <p>
+          Microvision Enterprises Limited is a duly registered private company in Kenya since year 2008 with a key objective as importer and trader in medical equipment and related hospital supplies. We are stockists and distributors of mainly Laboratory and other categories of surgical and medical Equipment consumables. We procure quality and relevant equipment from reliable manufacturers worldwide.
+        </p>
+        <p>
+          We are appointed sole agents for many reputable manufacturers in specialist fields. All our products come with after sales service and warranty. Deliveries are done on time and customer service offers timely advice in case of queries. Our clients include private clinics, medium and large hospitals. We also participate in public and private tenders. We are able to source products under short notice through our international network.
+        </p>
+        <h2 className="pt-4 text-2xl">Mission</h2>
+        <p>
+          Microvision Enterprises Limited exists to provide affordable high quality medical equipment to our clients coupled with excellent customer service and long term client relationship.
+        </p>
+        <h2 className="pt-4 text-2xl">Vision</h2>
+        <p>
+          We see ourselves as the preferred suppliers of hospital equipment in the East Africa region and beyond with a large clientele of very satisfied customers that we share mutual benefit in business and as partners.
+        </p>
       </div>
       <section className="mt-10" aria-labelledby="certs">
         <h2 id="certs" className="text-2xl">Certificates, licences and memberships</h2>

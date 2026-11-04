@@ -1,7 +1,6 @@
 /**
  * Public company facts.
- * Email and opening hours are placeholders until Microvision confirms them.
- * TODO: replace email and hours with approved details.
+ * Opening hours are still an example until Microvision confirms them.
  */
 
 export const site = {
@@ -12,8 +11,8 @@ export const site = {
   phoneDisplay: "0790 669 988",
   phoneTel: "+254790669988",
   whatsappUrl: "https://wa.me/254790669988",
-  email: "enquiries@microvisione.com",
-  emailIsPlaceholder: true,
+  email: "info@microvisione.com",
+  emailIsPlaceholder: false,
   address: {
     line1: "Loipi Plaza, Lunga Lunga Road",
     locality: "Industrial Area, Nairobi, Kenya",

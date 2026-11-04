@@ -31,10 +31,10 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
           <h2 className="text-sm font-semibold uppercase tracking-wide">Explore</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {[
-              ["/#gallery", "Gallery"],
+              ["/about", "About"],
+              ["/gallery", "Gallery"],
               ["/brands", "Manufacturers"],
               ["/services", "Biomedical and after-sales"],
-              ["/about", "About"],
               ["/events", "Events and activities"],
               ["/careers", "Careers"],
               ["/contact", "Contact"],
@@ -80,9 +80,15 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
         </div>
       </div>
       <div className="border-t border-on-dark/15">
-        <p className="mx-auto max-w-6xl px-4 py-4 text-xs text-on-dark/70 sm:px-6">
-          © {site.catalogueAsOf.slice(0, 4)} Microvision Enterprises Ltd. Catalogue illustrations are placeholders.
-        </p>
+        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-4 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
+          <p className="text-xs text-on-dark/70">
+            © {site.catalogueAsOf.slice(0, 4)} Microvision Enterprises Ltd. Catalogue illustrations are placeholders.
+          </p>
+          <a href="https://codewithseth.co.ke" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs text-on-dark/80 hover:text-white">
+            <img src="/brand/smo.jpg" alt="" className="h-9 w-9 rounded-full bg-white object-cover" />
+            Built by codewithseth.co.ke
+          </a>
+        </div>
       </div>
     </footer>
   );

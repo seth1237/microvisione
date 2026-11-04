@@ -34,7 +34,7 @@ export function AdminCertificationPanel({ items }: { items: CertificationLogo[] 
     setName("");
     setPurpose("");
     event.currentTarget.reset();
-    setMessage("Logo added. It will show in the Certification carousel.");
+    setMessage("Logo added.");
     router.refresh();
   }
 
@@ -58,7 +58,7 @@ export function AdminCertificationPanel({ items }: { items: CertificationLogo[] 
         <div>
           <span className="admin-eyebrow">Microvision Enterprises Ltd</span>
           <h1>Certification</h1>
-          <p>Upload a certificate logo and the event or purpose. Both appear in the homepage carousel.</p>
+          <p>Upload a certificate logo and the event or purpose.</p>
         </div>
       </header>
       {message ? <p className="admin-message">{message}</p> : null}

@@ -7,8 +7,8 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/products", destination: "/", permanent: false },
-      { source: "/offers", destination: "/#gallery", permanent: false },
-      { source: "/offers/:path*", destination: "/#gallery", permanent: false },
+      { source: "/offers", destination: "/gallery", permanent: false },
+      { source: "/offers/:path*", destination: "/gallery", permanent: false },
     ];
   },
   async rewrites() {

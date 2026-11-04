@@ -27,6 +27,7 @@ import { useWishlistStore } from "@/store/wishlist";
 
 const companyLinks = [
   { href: "/about", label: "About" },
+  { href: "/gallery", label: "Gallery" },
   { href: "/events", label: "Events" },
   { href: "/careers", label: "Careers" },
   { href: "/contact", label: "Contact" },
@@ -186,11 +187,10 @@ export function SiteHeader() {
                 </ul>
                 <ul className="mt-4 space-y-1 border-t border-line pt-4 text-sm font-semibold">
                   {[
-                    ["/#certification", "Certification"],
-                    ["/#gallery", "Gallery"],
                     ["/brands", "Brands"],
                     ["/services", "Services"],
                     ["/about", "About"],
+                    ["/gallery", "Gallery"],
                     ["/events", "Events"],
                     ["/careers", "Careers"],
                     ["/contact", "Contact"],
@@ -248,8 +248,6 @@ export function SiteHeader() {
         <div className={clipNav ? "overflow-hidden" : undefined}>
           <nav className="border-t border-white/40" aria-label="Primary" aria-hidden={compact}>
             <div className="mx-auto flex max-w-7xl items-center justify-between px-8">
-              <NavLink href="/#certification">Certification</NavLink>
-              <NavLink href="/#gallery">Gallery</NavLink>
               <NavLink href="/brands" current={pathname.startsWith("/brands")}>Brands</NavLink>
               <NavLink href="/services" current={pathname.startsWith("/services")}>Services</NavLink>
               <div
