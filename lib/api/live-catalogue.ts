@@ -25,6 +25,8 @@ type LiveProduct = {
   highlights?: string[];
   howToUse?: string;
   measuringParameters?: string;
+  distributedFor?: string;
+  imageAssets?: Array<{ secureUrl?: string; installation?: boolean }>;
 };
 
 type LiveCategory = {
@@ -105,6 +107,19 @@ function toProduct(item: LiveProduct): Product {
   const category = knownCategories.find((entry) => entry.slug === item.categoryId || entry.name === item.categoryName);
   const brand = knownBrands.find((entry) => entry.name === item.manufacturer);
   const price = Number(item.price) || 0;
+  const assets = (item.imageAssets || []).filter((asset) => asset.secureUrl);
+  const installationUrls = new Set(
+    assets.filter((asset) => asset.installation).map((asset) => publicAssetUrl(asset.secureUrl)).filter(Boolean),
+  );
+  const assetPhotos = assets
+    .filter((asset) => !asset.installation)
+    .map((asset) => publicAssetUrl(asset.secureUrl))
+    .filter((url): url is string => Boolean(url));
+  const listedPhotos = [item.image, ...(item.images || [])]
+    .map((url) => publicAssetUrl(url))
+    .filter((url): url is string => Boolean(url) && !installationUrls.has(url));
+  const photos = [...new Set(assetPhotos.length ? assetPhotos : listedPhotos)].map((url) => ({ url, caption: "" }));
+  const installations = [...installationUrls].map((url) => ({ url: url as string, caption: "" }));
   return {
     id: item.id,
     slug: item.slug,
@@ -114,17 +129,16 @@ function toProduct(item: LiveProduct): Product {
     shortDescription: item.description || `${item.name} from Microvision Enterprises Ltd.`,
     longDescription: item.details || item.description || item.name,
     images: [{ variant: "primary", alt: item.name }],
-    photoUrl: publicAssetUrl(item.image),
-    photos: [...new Set([item.image, ...(item.images || [])].filter(Boolean) as string[])]
-      .map((url) => publicAssetUrl(url))
-      .filter((url): url is string => Boolean(url))
-      .map((url) => ({ url, caption: '' })),
+    photoUrl: photos[0]?.url,
+    photos,
+    installations,
     specs: [],
     features: Array.isArray(item.highlights)
-      ? item.highlights.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, 8)
+      ? item.highlights.map((entry) => String(entry || "").trim()).filter(Boolean)
       : [],
     howToUse: item.howToUse || "",
     measuringParameters: item.measuringParameters || "",
+    distributedFor: item.distributedFor || "",
     purchaseMode: item.checkout && price > 0 ? "both" : "quote",
     price: price > 0 ? price : undefined,
     currency: "KES",

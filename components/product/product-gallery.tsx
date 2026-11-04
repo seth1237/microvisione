@@ -14,7 +14,7 @@ export function ProductGallery({
   const [active, setActive] = useState(0);
   if (!photos.length) {
     return (
-      <div className="flex aspect-[4/3] items-center justify-center rounded-md border border-line bg-surface px-6 text-center text-sm text-muted">
+      <div className="flex aspect-square items-center justify-center rounded-2xl border border-slate-200 bg-[#F8FAFC] px-6 text-center text-sm text-slate-500 sm:aspect-[4/3]">
         No photograph yet
       </div>
     );
@@ -23,9 +23,9 @@ export function ProductGallery({
 
   return (
     <div>
-      <figure className="overflow-hidden rounded-md bg-white">
-        <img src={current.url} alt={current.caption || name} className="aspect-[4/3] w-full bg-white object-contain" />
-        {current.caption ? <figcaption className="border-t border-line px-1 py-3 text-sm text-muted">{current.caption}</figcaption> : null}
+      <figure className="overflow-hidden rounded-2xl border border-slate-200 bg-[#F8FAFC]">
+        <img src={current.url} alt={current.caption || name} className="aspect-square w-full object-contain p-4 sm:aspect-[4/3] sm:p-8" />
+        {current.caption ? <figcaption className="border-t border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">{current.caption}</figcaption> : null}
       </figure>
       {photos.length > 1 ? (
         <div className="mt-3 flex gap-2 overflow-x-auto">
@@ -34,7 +34,7 @@ export function ProductGallery({
               key={`${photo.url}-${index}`}
               type="button"
               onClick={() => setActive(index)}
-              className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-white ${index === active ? "border-brand" : "border-line"}`}
+              className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-[#F8FAFC] ${index === active ? "border-brand" : "border-slate-200"}`}
               aria-label={photo.caption || `Photo ${index + 1}`}
             >
               <img src={photo.url} alt="" className="h-full w-full object-contain" />

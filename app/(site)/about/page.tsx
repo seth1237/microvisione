@@ -1,9 +1,10 @@
 import { Reveal } from "@/components/motion/reveal";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
-import { getCertificates, getCompanyProfilePages } from "@/lib/api/content";
-import { site } from "@/lib/site";
-import { formatIsoDate, isPastIsoDate } from "@/lib/utils/format";
+import { getCompanyProfilePages } from "@/lib/api/content";
+import { liveCertifications } from "@/lib/api/certifications";
+
+export const instant = false;
 
 export const metadata = {
   title: "About",
@@ -12,7 +13,10 @@ export const metadata = {
 };
 
 export default async function AboutPage() {
-  const [certificates, profilePages] = await Promise.all([getCertificates(), getCompanyProfilePages()]);
+  const [certificates, profilePages] = await Promise.all([
+    liveCertifications().catch(() => []),
+    getCompanyProfilePages(),
+  ]);
   return (
     <Container className="py-8">
       <PageIntro title="About Microvision" />
@@ -47,29 +51,22 @@ export default async function AboutPage() {
           </section>
         </Reveal>
       ) : null}
-      <Reveal>
-      <section className="mt-10" aria-labelledby="certs">
-        <h2 id="certs" className="text-2xl">Certificates, licences and memberships</h2>
-        <p className="mt-2 text-sm text-muted">Memberships are not listed because none have been confirmed for publication.</p>
-        <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-          {certificates.map((certificate) => {
-            const expired = certificate.expiresAt ? isPastIsoDate(certificate.expiresAt, site.catalogueAsOf) : false;
-            return (
-              <li key={certificate.id} className="rounded-md border border-line bg-surface p-4">
-                <p className="font-semibold">{certificate.name}</p>
-                <p className="text-sm text-muted">{certificate.issuer}</p>
-                <p className="text-sm text-muted">{certificate.reference}</p>
-                {certificate.expiresAt ? (
-                  <p className="mt-2 text-sm font-semibold text-warning">
-                    {expired ? "Expiry flag: past the sample date" : "Expiry"} {formatIsoDate(certificate.expiresAt)}
-                  </p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-      </Reveal>
+      {certificates.length ? (
+        <Reveal>
+          <section className="mt-10" aria-labelledby="certs">
+            <h2 id="certs" className="text-2xl">Certificates</h2>
+            <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {certificates.map((certificate) => (
+                <li key={certificate.id} className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+                  <img src={certificate.imageUrl} alt="" className="mx-auto h-24 w-full object-contain" />
+                  <p className="mt-3 font-semibold">{certificate.name}</p>
+                  {certificate.purpose ? <p className="mt-1 text-sm text-muted">{certificate.purpose}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Reveal>
+      ) : null}
     </Container>
   );
 }

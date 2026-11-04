@@ -53,49 +53,46 @@ export function PurchasePanel({
 
   return (
     <>
-      <aside className="rounded-md border border-line bg-white p-5">
-        {brandName && !/tbc/i.test(brandName) ? <p className="text-sm text-muted">{brandName}</p> : null}
-        <div className="mt-2">
-          <PriceTag price={showPrices === false ? undefined : product.price} placeholder={product.priceIsPlaceholder} className="text-lg" />
-        </div>
+      <aside className="border-t border-slate-200 pt-5">
+        <PriceTag price={showPrices === false ? undefined : product.price} placeholder={product.priceIsPlaceholder} className="text-2xl" />
         {product.stockIsPlaceholder ? null : (
           <div className="mt-3">
             <StockBadge status={product.stockStatus} />
           </div>
         )}
-        <div className="mt-5 hidden flex-col gap-2 lg:flex">
+        <div className="mt-5 hidden gap-2 lg:grid">
           <Button type="button" onClick={onQuote}>Request Quote</Button>
-          <Button variant="outline" className="bg-surface/40" asChild>
-            <a href={whatsapp} target="_blank" rel="noopener noreferrer">
-              <MessageCircle className="h-4 w-4" aria-hidden="true" />
-              Inquire via WhatsApp
-            </a>
-          </Button>
-          <Button type="button" variant="outline" className="bg-surface/40" aria-pressed={wished} onClick={onSave}>
-            <Heart className={cn("h-4 w-4", wished && "fill-accent text-accent")} aria-hidden="true" />
-            {wished ? "Saved" : "Save"}
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" asChild>
+              <a href={whatsapp} target="_blank" rel="noopener noreferrer">
+                <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                WhatsApp
+              </a>
+            </Button>
+            <Button type="button" variant="outline" aria-pressed={wished} onClick={onSave}>
+              <Heart className={cn("h-4 w-4", wished && "fill-accent text-accent")} aria-hidden="true" />
+              {wished ? "Saved" : "Save"}
+            </Button>
+          </div>
         </div>
-        <p className="mt-4 text-sm">
+        <p className="mt-4 text-sm text-slate-600">
           <Link href="/services" className="font-semibold text-brand">
             Installation, training and service
           </Link>
         </p>
       </aside>
-      <div className="fixed inset-x-0 bottom-16 z-30 border-t border-white/50 bg-surface/70 p-3 backdrop-blur-xl lg:hidden">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-2">
-          <Button type="button" size="sm" className="col-span-2" onClick={onQuote}>
+      <div className="fixed inset-x-0 bottom-16 z-30 border-t border-slate-200 bg-white/95 p-3 backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-6xl items-center gap-2">
+          <Button type="button" className="min-w-0 flex-1" onClick={onQuote}>
             Request Quote
           </Button>
-          <Button size="sm" variant="outline" className="bg-surface/40" asChild>
-            <a href={whatsapp} target="_blank" rel="noopener noreferrer">
+          <Button variant="outline" size="icon" asChild>
+            <a href={whatsapp} target="_blank" rel="noopener noreferrer" aria-label="Inquire via WhatsApp">
               <MessageCircle className="h-4 w-4" aria-hidden="true" />
-              Inquire via WhatsApp
             </a>
           </Button>
-          <Button type="button" size="sm" variant="outline" className="bg-surface/40" aria-pressed={wished} onClick={onSave}>
+          <Button type="button" variant="outline" size="icon" aria-pressed={wished} aria-label={wished ? "Saved" : "Save"} onClick={onSave}>
             <Heart className={cn("h-4 w-4", wished && "fill-accent text-accent")} aria-hidden="true" />
-            {wished ? "Saved" : "Save"}
           </Button>
         </div>
       </div>

@@ -22,7 +22,11 @@ export default async function InstallationsPage() {
       ) : (
         <ul className="mt-8 grid gap-4 sm:grid-cols-2">
           {items.map((item) => (
-            <li key={item._id} className="rounded-md border border-line bg-surface p-4">
+            <li key={item._id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              {item.cover?.secureUrl ? (
+                <img src={item.cover.secureUrl} alt="" className="aspect-[16/10] w-full object-cover" />
+              ) : null}
+              <div className="p-4">
               <h2 className="text-lg font-semibold">
                 <Link href={`/installations/${item.slug}`} className="hover:text-brand">
                   {item.title}
@@ -31,6 +35,7 @@ export default async function InstallationsPage() {
               <p className="mt-1 text-sm text-muted">
                 {[item.facility, item.location].filter(Boolean).join(" · ")}
               </p>
+              </div>
             </li>
           ))}
         </ul>

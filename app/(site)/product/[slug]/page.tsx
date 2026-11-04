@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { ProductView } from "@/components/analytics/product-view";
 import { ProductCard } from "@/components/product/product-card";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductShare } from "@/components/product/product-share";
-import { ProductTabs } from "@/components/product/product-tabs";
+import { ProductFacts } from "@/components/product/product-facts";
 import { PurchasePanel } from "@/components/product/purchase-panel";
 import { WhiteCanvas } from "@/components/product/white-canvas";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -48,13 +47,11 @@ export async function generateMetadata({
   };
 }
 
-export default function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   return (
     <div className="flex-1 bg-white">
       <WhiteCanvas />
-      <Suspense fallback={<div className="mx-auto max-w-6xl bg-white px-4 py-10 text-sm text-muted">Loading product…</div>}>
-        <ProductContent params={params} />
-      </Suspense>
+      <ProductContent params={params} />
     </div>
   );
 }
@@ -71,11 +68,13 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
   ]);
   const brand = brands.find((item) => item.id === product.brandId);
   const category = categories.find((item) => item.id === product.categoryId);
+  const brandName = brand && !/tbc/i.test(brand.name) ? brand.name : "";
+  const maker = product.distributedFor || brandName;
   const url = absoluteUrl(`/product/${product.slug}`);
   const catalogueHref = catalogueDownloadHref({ id: product.id }, catalogues);
 
   return (
-    <Container className="bg-white pt-8 pb-44 lg:py-8">
+    <Container className="bg-white pt-6 pb-40 lg:py-10">
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -95,49 +94,38 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           { label: product.name },
         ]}
       />
-      <div className="mt-6 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-3xl text-ink sm:text-4xl">{product.name}</h1>
-          {category ? (
-            <p className="mt-2 text-sm text-muted">
-              <Link href={`/category/${category.slug}`} className="font-semibold text-brand">{category.name}</Link>
-            </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {catalogueHref ? (
-            <a href={catalogueHref} className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-brand hover:text-brand">
-              View Catalogue
-            </a>
-          ) : null}
-          <ProductShare
-            title={product.name}
-            url={url}
-            productId={product.id}
-            categoryId={category?.slug || product.categoryId}
-            categoryName={category?.name || ""}
-          />
-        </div>
-      </div>
-      {product.features.filter((feature) => feature.trim() && !/tbc|placeholder/i.test(feature)).length ? (
-        <ul className="mt-4 flex gap-2 overflow-x-auto">
-          {product.features.filter((feature) => feature.trim() && !/tbc|placeholder/i.test(feature)).map((feature) => (
-            <li key={feature} className="shrink-0 rounded-full border border-line bg-white px-3 py-1 text-sm text-ink">
-              {feature}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <div className="mt-6 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="mt-5 grid items-start gap-6 lg:mt-8 lg:grid-cols-2 lg:gap-12">
         <ProductGallery
           name={product.name}
           photos={product.photos?.length ? product.photos : product.photoUrl ? [{ url: product.photoUrl, caption: "" }] : []}
         />
         <div className="lg:sticky lg:top-24">
-          <PurchasePanel product={product} brandName={brand && !/tbc/i.test(brand.name) ? brand.name : ""} />
+          {maker ? (
+            <p className="text-sm text-slate-500">
+              {product.distributedFor ? `Distributed for ${product.distributedFor}` : maker}
+            </p>
+          ) : null}
+          <div className="mt-1 flex items-start justify-between gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight text-[#111827] sm:text-3xl">{product.name}</h1>
+            <ProductShare
+              title={product.name}
+              url={url}
+              productId={product.id}
+              categoryId={category?.slug || product.categoryId}
+              categoryName={category?.name || ""}
+            />
+          </div>
+          {category ? (
+            <p className="mt-2 text-sm">
+              <Link href={`/category/${category.slug}`} className="font-semibold text-brand">{category.name}</Link>
+            </p>
+          ) : null}
+          <div className="mt-5">
+            <PurchasePanel product={product} brandName={maker} />
+          </div>
         </div>
       </div>
-      <ProductTabs product={product} />
+      <ProductFacts product={product} catalogueHref={catalogueHref} />
       {related.length > 0 ? (
         <section className="mt-12" aria-labelledby="related-heading">
           <h2 id="related-heading" className="text-2xl">Related products</h2>

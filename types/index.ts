@@ -73,8 +73,10 @@ export interface Product {
   /** Uploaded catalogue photo. Illustrations are used when this is absent. */
   photoUrl?: string;
   photos?: { url: string; caption: string }[];
+  installations?: { url: string; caption: string }[];
   howToUse?: string;
   measuringParameters?: string;
+  distributedFor?: string;
 }
 
 export interface Category {
