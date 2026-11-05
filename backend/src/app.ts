@@ -129,6 +129,9 @@ const CORS_ORIGINS = new Set([
   'https://www.accordmedical.co.ke',
   'https://accordwebsite.vercel.app',
   'https://microvision.codewithseth.co.ke',
+  'https://www.microvisione.com',
+  'https://microvisione.com',
+  'https://microvisione-nae5.vercel.app',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ])

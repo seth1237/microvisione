@@ -166,59 +166,6 @@ export interface ServiceOffering {
   points: string[];
 }
 
-export interface OrderLine {
-  productId: string;
-  name: string;
-  quantity: number;
-  unitPrice?: number;
-  priceIsPlaceholder?: boolean;
-}
-
-export type DeliveryStatus = "Received" | "Dispatched" | "Delivered";
-
-export interface SampleOrder {
-  id: string;
-  reference: string;
-  placedAt: string;
-  status: DeliveryStatus;
-  payment: "M-Pesa" | "Invoice";
-  items: OrderLine[];
-  total?: number;
-  shipTo: string;
-  isSample: true;
-}
-
-export interface Machine {
-  id: string;
-  model: string;
-  serial: string;
-  installDate: string;
-  warrantyUntil?: string;
-  site: string;
-  isSample: true;
-}
-
-export type TicketStatus = "Open" | "In progress" | "Resolved";
-
-export interface Ticket {
-  id: string;
-  reference: string;
-  subject: string;
-  status: TicketStatus;
-  openedAt: string;
-  updatedAt: string;
-  isSample: true;
-}
-
-export interface AccountDocument {
-  id: string;
-  title: string;
-  kind: "Invoice" | "ETR receipt" | "Statement";
-  issuedAt: string;
-  href: string;
-  isSample: true;
-}
-
 export interface QuoteLine {
   productId: string;
   slug: string;

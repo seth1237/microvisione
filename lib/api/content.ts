@@ -1,7 +1,6 @@
 import "server-only";
 
 import { cacheLife } from "next/cache";
-import { sampleDocuments, sampleMachines, sampleOrders, sampleTickets } from "@/data/account";
 import { certificates, jobs, services } from "@/data/content";
 import { offers } from "@/data/offers";
 import { products } from "@/data/products";
@@ -92,31 +91,3 @@ export async function getJobBySlug(slug: string) {
   return list.find((job) => job.slug === slug) ?? null;
 }
 
-export async function getSampleOrders() {
-  "use cache";
-  cacheLife("hours");
-  return sampleOrders;
-}
-
-export async function getSampleOrder(id: string) {
-  const list = await getSampleOrders();
-  return list.find((order) => order.id === id) ?? null;
-}
-
-export async function getSampleMachines() {
-  "use cache";
-  cacheLife("hours");
-  return sampleMachines;
-}
-
-export async function getSampleTickets() {
-  "use cache";
-  cacheLife("hours");
-  return sampleTickets;
-}
-
-export async function getSampleDocuments() {
-  "use cache";
-  cacheLife("hours");
-  return sampleDocuments;
-}

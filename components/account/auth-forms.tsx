@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { isEmail } from "@/lib/utils/phone";
 import { useAuthStore } from "@/store/auth";
 
-const control = "mt-1 h-11 w-full rounded-md border border-line bg-surface px-3 text-sm";
+const control = "mt-1 h-11 w-full rounded-md border border-line bg-surface px-3 text-base";
 
 export function LoginForm() {
   const router = useRouter();
@@ -27,6 +27,7 @@ export function LoginForm() {
     setError("");
     const response = await fetch("/api/account/login/code", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim() }),
     });
@@ -49,6 +50,7 @@ export function LoginForm() {
     setError("");
     const response = await fetch("/api/account/login", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim(), code: code.trim() }),
     });
