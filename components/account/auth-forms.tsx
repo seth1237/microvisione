@@ -24,9 +24,10 @@ function rememberCustomer(customer: CustomerPayload, fallbackEmail: string, sign
 export function LoginForm() {
   const router = useRouter();
   const signIn = useAuthStore((state) => state.signIn);
-  const [step, setStep] = useState<"email" | "code">("email");
+  const [step, setStep] = useState<"email" | "code" | "phone">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -46,11 +47,42 @@ export function LoginForm() {
     });
     const payload = await response.json().catch(() => ({}));
     setBusy(false);
+    const plainText = (response.headers.get("content-type") || "").includes("text/plain");
+    if (response.status === 404 || plainText) {
+      setStep("phone");
+      setError("A login code cannot be sent from this site yet. Sign in with the phone number on the account.");
+      return;
+    }
     if (!response.ok) {
       setError(payload.message || "The login email could not be sent.");
       return;
     }
     setStep("code");
+  }
+
+  async function signInWithPhone(event: React.FormEvent) {
+    event.preventDefault();
+    if (!isKenyanPhone(phone)) {
+      setError("Enter a valid Kenyan phone number.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    const response = await fetch("/api/account/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: phone.trim() }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setBusy(false);
+    if (!response.ok || !payload.data) {
+      setError(payload.message || "That phone number could not be signed in.");
+      return;
+    }
+    rememberCustomer(payload.data as CustomerPayload, "", signIn);
+    router.push("/account");
+    router.refresh();
   }
 
   async function verify(event: React.FormEvent) {
@@ -109,6 +141,37 @@ export function LoginForm() {
     );
   }
 
+  if (step === "phone") {
+    return (
+      <form onSubmit={signInWithPhone} className="max-w-md space-y-4" noValidate>
+        <p className="text-sm text-muted">Use the phone number saved on the account. This browser stays signed in.</p>
+        {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
+        <label className="block text-sm font-semibold">
+          Phone
+          <input
+            className={control}
+            type="tel"
+            autoComplete="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        </label>
+        <Button type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</Button>
+        <button
+          type="button"
+          className="block text-sm font-semibold text-brand"
+          onClick={() => {
+            setStep("email");
+            setError("");
+          }}
+        >
+          Use email instead
+        </button>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={sendCode} className="max-w-md space-y-4" noValidate>
       {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
@@ -123,6 +186,9 @@ export function LoginForm() {
         />
       </label>
       <Button type="submit" disabled={busy}>{busy ? "Sending…" : "Send login code"}</Button>
+      <button type="button" className="block text-sm font-semibold text-brand" onClick={() => { setStep("phone"); setError(""); }}>
+        Sign in with phone number
+      </button>
     </form>
   );
 }

@@ -13,7 +13,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     async function load() {
-      const response = await fetch("/api/account/me", { cache: "no-store" }).catch(() => null);
+      const response = await fetch("/api/account/me", { cache: "no-store", credentials: "include" }).catch(() => null);
       if (!active) return;
       if (!response || response.status === 401) {
         signOut();

@@ -7,14 +7,26 @@ import { sessionId, visitorId } from "@/lib/analytics/shop";
 import { useCatalogue } from "@/components/providers/catalogue-provider";
 import { cn } from "@/lib/utils/cn";
 
-export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boolean; onNavigate?: () => void }) {
+export function SearchBox({
+  autoFocus = false,
+  onNavigate,
+  listId = "header-search-list",
+  placeholder = "Search analyzers, meters, brands",
+  inputClassName,
+  menuClassName,
+}: {
+  autoFocus?: boolean;
+  onNavigate?: () => void;
+  listId?: string;
+  placeholder?: string;
+  inputClassName?: string;
+  menuClassName?: string;
+}) {
   const { searchIndex } = useCatalogue();
   const router = useRouter();
   const [term, setTerm] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const listId = "header-search-list";
-
   const matches = useMemo(() => {
     const query = term.trim().toLowerCase();
     if (!query) return [];
@@ -80,8 +92,8 @@ export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boole
           aria-activedescendant={open && matches[active] ? `search-opt-${matches[active].id}` : undefined}
           value={term}
           autoFocus={autoFocus}
-          placeholder="Search analyzers, meters, brands"
-          className="h-11 w-full rounded-md border border-line bg-surface pr-3 pl-9 text-base"
+          placeholder={placeholder}
+          className={cn("h-11 w-full rounded-md border border-line bg-surface pr-3 pl-9 text-base", inputClassName)}
           onChange={(event) => {
             setTerm(event.target.value);
             setOpen(true);
@@ -93,7 +105,7 @@ export function SearchBox({ autoFocus = false, onNavigate }: { autoFocus?: boole
         />
       </label>
       {open && term.trim() ? (
-        <ul id={listId} role="listbox" className="absolute z-40 mt-1 w-full overflow-hidden rounded-md border border-line bg-surface shadow-pop">
+        <ul id={listId} role="listbox" className={cn("absolute z-40 mt-1 w-full overflow-hidden rounded-md border border-line bg-surface shadow-pop", menuClassName)}>
           {matches.length === 0 ? (
             <li className="px-3 py-3 text-sm text-muted">No matching products</li>
           ) : (

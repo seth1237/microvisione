@@ -10,7 +10,6 @@ import {
   Menu,
   MessageCircle,
   Phone,
-  Search,
   ShoppingCart,
   User,
   X,
@@ -37,7 +36,6 @@ export function SiteHeader() {
   const pathname = usePathname();
   const { categories } = useCatalogue();
   const [companyOpen, setCompanyOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [clipNav, setClipNav] = useState(false);
   const compactRef = useRef(false);
@@ -47,7 +45,6 @@ export function SiteHeader() {
   if (pathname !== menuPath) {
     setMenuPath(pathname);
     setCompanyOpen(false);
-    setSearchOpen(false);
   }
   const items = useCartStore((state) => state.items);
   const wishes = useWishlistStore((state) => state.ids.length);
@@ -225,9 +222,6 @@ export function SiteHeader() {
         </div>
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2 lg:ml-0 lg:gap-3">
-          <button type="button" className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-line lg:hidden" aria-label="Search" onClick={() => setSearchOpen(true)}>
-            <Search className="h-4 w-4" aria-hidden="true" />
-          </button>
           <Link href="/quote" className="hidden h-11 items-center rounded-md bg-accent px-3 text-sm font-semibold text-on-accent lg:inline-flex">
             Request quote
           </Link>
@@ -242,6 +236,15 @@ export function SiteHeader() {
             {items.length > 0 ? <span className="hidden text-xs font-semibold xl:inline">{formatKes(cartTotal(items))}</span> : null}
           </IconLink>
         </div>
+      </div>
+
+      <div className="px-3 pb-3 lg:hidden">
+        <SearchBox
+          listId="header-search-list-phone"
+          placeholder="Search"
+          inputClassName="rounded-full border-transparent bg-paper pl-10"
+          menuClassName="rounded-2xl shadow-none"
+        />
       </div>
 
       <div className="mv-nav-fold hidden lg:grid">
@@ -280,19 +283,6 @@ export function SiteHeader() {
         </div>
       </div>
       </div>
-
-      <Dialog.Root open={searchOpen} onOpenChange={setSearchOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-          <Dialog.Content className="glass fixed inset-x-4 top-20 z-50 rounded-md p-4">
-            <Dialog.Title className="text-base">Search the catalogue</Dialog.Title>
-            <Dialog.Description className="mt-1 text-sm text-muted">Suggestions update as you type.</Dialog.Description>
-            <div className="mt-3">
-              <SearchBox autoFocus onNavigate={() => setSearchOpen(false)} />
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
     </header>
     <div className="hidden lg:block" style={{ height: spacer }} aria-hidden="true" />
     </>

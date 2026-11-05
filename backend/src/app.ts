@@ -121,7 +121,7 @@ import {
   replaceProductCheckout,
   startCheckout,
 } from '../../lib/platform/checkout-data'
-import { addAccountDocument, getCustomerAccount, listAccountOrders, listAccountInterest, listAccountPurchases, listClientInterestBoard, listCustomerDocuments, listUploadedAccountDocuments, readCustomerDocument, recordCustomerInterest, registerCustomer, removeUploadedAccountDocument, requestCustomerLoginCode, verifyCustomerLoginCode } from '../../lib/platform/account-data'
+import { addAccountDocument, getCustomerAccount, listAccountOrders, listAccountInterest, listAccountPurchases, listClientInterestBoard, listCustomerDocuments, listUploadedAccountDocuments, loginCustomer, readCustomerDocument, recordCustomerInterest, registerCustomer, removeUploadedAccountDocument, requestCustomerLoginCode, verifyCustomerLoginCode } from '../../lib/platform/account-data'
 import medtrackRoutes from './medtrack-routes'
 
 const CORS_ORIGINS = new Set([
@@ -669,7 +669,10 @@ app.post('/api/account/login/code', async (c) => {
 app.post('/api/account/login', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}))
-    const customer = await verifyCustomerLoginCode(body.email, body.code)
+    const code = textValue(body.code, 12)
+    const customer = code
+      ? await verifyCustomerLoginCode(body.email, code)
+      : await loginCustomer(body.phone)
     writeCustomerSession(c, customer)
     return c.json({ success: true, data: customer })
   } catch (error) {
