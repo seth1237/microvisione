@@ -12,6 +12,7 @@ import {
   mysqlDeleteLoginCodes,
   mysqlEnsureCustomerByEmail,
   mysqlGetAccountDocument,
+  mysqlGetCustomerByEmail,
   mysqlGetCustomerById,
   mysqlGetCustomerByPhone,
   mysqlGetFile,
@@ -40,15 +41,24 @@ export async function registerCustomer(input: {
   name: string
   facilityName: string
   phone: string
+  email: string
   location: string
 }): Promise<CustomerAccount> {
   if (!isMysqlConfigured()) throw new Error('Accounts are not available right now')
   const phone = normalizeKenyaPhone(input.phone)
   if (!phone) throw new Error('Enter a valid Kenyan phone number')
+  const email = normalizeAccountEmail(input.email)
+  const [existingEmail, existingPhone] = await Promise.all([
+    mysqlGetCustomerByEmail(email),
+    mysqlGetCustomerByPhone(phone),
+  ])
+  if (existingEmail) throw new Error('An account with this email already exists. Sign in instead.')
+  if (existingPhone) throw new Error('An account with this phone number already exists. Sign in instead.')
   return mysqlCreateCustomer({
     name: cleanName(input.name, 'your name'),
     facilityName: cleanName(input.facilityName, 'the facility name'),
     phone,
+    email,
     location: cleanName(input.location, 'location'),
   })
 }
@@ -129,6 +139,8 @@ function hashesMatch(left: string, right: string) {
 export async function requestCustomerLoginCode(emailValue: unknown) {
   if (!isMysqlConfigured()) throw new Error('Accounts are not available right now')
   const email = normalizeAccountEmail(emailValue)
+  const customer = await mysqlGetCustomerByEmail(email)
+  if (!customer) throw new Error('No account uses that email. Create an account first.')
   const recent = await mysqlCountRecentLoginCodes(email, new Date(Date.now() - 60 * 60 * 1000))
   if (recent >= 5) throw new Error('Wait a few minutes before requesting another code.')
   const code = randomInt(0, 1000000).toString().padStart(6, '0')
@@ -164,7 +176,8 @@ export async function verifyCustomerLoginCode(emailValue: unknown, codeValue: un
     throw new Error('That code is not correct.')
   }
   await mysqlDeleteLoginCodes(email)
-  const customer = await mysqlEnsureCustomerByEmail(email)
+  const customer = await mysqlGetCustomerByEmail(email)
+  if (!customer) throw new Error('No account uses that email. Create an account first.')
   await mysqlTouchCustomer(customer.id)
   return customer
 }

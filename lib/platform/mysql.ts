@@ -2100,17 +2100,19 @@ export async function mysqlCreateCustomer(input: {
   name: string
   facilityName: string
   phone: string
+  email?: string
   location: string
 }) {
   await ensureMysqlSchema()
   const pool = await getPool()
   const now = new Date()
+  const email = String(input.email || '').trim().toLowerCase() || null
   try {
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO accord_nx_customers
-        (name, facility_name, phone, location, created_at, updated_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [input.name, input.facilityName, input.phone, input.location, now, now, now],
+        (name, facility_name, phone, email, location, created_at, updated_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [input.name, input.facilityName, input.phone, email, input.location, now, now, now],
     )
     const customer = await mysqlGetCustomerById(String(result.insertId))
     if (!customer) throw new Error('Could not create account')
@@ -2118,7 +2120,7 @@ export async function mysqlCreateCustomer(input: {
     return customer
   } catch (error) {
     const code = (error as { code?: string }).code
-    if (code === 'ER_DUP_ENTRY') throw new Error('An account with this phone number already exists. Sign in instead.')
+    if (code === 'ER_DUP_ENTRY') throw new Error('An account with these details already exists. Sign in instead.')
     throw error
   }
 }

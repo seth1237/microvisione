@@ -646,6 +646,7 @@ app.post('/api/account/register', async (c) => {
       name: textValue(body.name, 120),
       facilityName: textValue(body.facilityName || body.facility, 120),
       phone: textValue(body.phone, 32),
+      email: textValue(body.email, 191),
       location: textValue(body.location, 120),
     })
     writeCustomerSession(c, customer)
