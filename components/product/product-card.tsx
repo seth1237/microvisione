@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingCart, MessageCircle } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
 
 import { postShopEvent } from "@/lib/analytics/shop";
 import { CategoryGlyph } from "@/components/product/category-glyph";
@@ -60,9 +60,17 @@ function flyToCart(source: HTMLElement) {
   };
 }
 
-const REVEAL_S = 0.6;
-const STAGGER_S = 0.07;
 const ROW = 5;
+
+function playCardIn(node: HTMLElement, delay = 0) {
+  node.animate(
+    [
+      { opacity: 0, transform: "translateY(8px)" },
+      { opacity: 1, transform: "none" },
+    ],
+    { duration: 420, delay, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "backwards" },
+  );
+}
 
 function chipText(value: string) {
   const text = value.trim();
@@ -84,26 +92,51 @@ export function ProductCard({
   const addToCart = useCartStore((state) => state.add);
   const reduceMotion = useReducedMotion();
   const cardRef = useRef<HTMLElement>(null);
-  const [inView, setInView] = useState(false);
+  const played = useRef(false);
+  const [offscreen, setOffscreen] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
 
+  useLayoutEffect(() => {
+    const node = cardRef.current;
+    if (!node || played.current || reduceMotion === true) return;
+    const rect = node.getBoundingClientRect();
+    if (rect.width > 0 && rect.top > window.innerHeight + 48) {
+      setOffscreen(true);
+      return;
+    }
+    played.current = true;
+    playCardIn(node, (index % ROW) * 60);
+  }, [reduceMotion, index]);
+
   useEffect(() => {
-    if (reduceMotion) return;
+    if (!offscreen) return;
     const node = cardRef.current;
     if (!node) return;
+    const reveal = () => {
+      if (played.current) return;
+      played.current = true;
+      node.style.opacity = "";
+      setOffscreen(false);
+      playCardIn(node);
+    };
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        setInView(true);
-        observer.disconnect();
+        if (entries.some((entry) => entry.isIntersecting)) reveal();
       },
-      { threshold: 0.2 },
+      { threshold: 0, rootMargin: "80px 0px" },
     );
     observer.observe(node);
-    return () => observer.disconnect();
-  }, [reduceMotion]);
-
-  const revealed = Boolean(reduceMotion) || inView;
+    const onScroll = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.top < window.innerHeight + 80 && rect.bottom > 0) reveal();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [offscreen]);
   const { brands, categories, showPrices } = useCatalogue();
 
   const brandName =
@@ -153,17 +186,7 @@ export function ProductCard({
   const photo = product.photoUrl && !photoFailed ? product.photoUrl : "";
 
   return (
-    <motion.article
-      ref={cardRef}
-      initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-      animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
-      transition={{
-        duration: revealed && !reduceMotion ? REVEAL_S : 0,
-        delay: revealed && !reduceMotion ? (index % ROW) * STAGGER_S : 0,
-        ease: [0.22, 1, 0.36, 1],
-      }}
-      className="h-full"
-    >
+    <article ref={cardRef} className="h-full" style={offscreen ? { opacity: 0 } : undefined}>
       <div
         className={cn(
           "group relative flex h-full min-w-0 flex-col overflow-hidden",
@@ -299,7 +322,7 @@ export function ProductCard({
         </div>
       </div>
       </div>
-    </motion.article>
+    </article>
   );
 }
 
