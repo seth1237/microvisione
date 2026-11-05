@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { Heart, MessageCircle } from "lucide-react";
+import { Check, Heart, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { postShopEvent } from "@/lib/analytics/shop";
 import { PriceTag } from "@/components/product/price-tag";
@@ -75,10 +74,9 @@ export function PurchasePanel({
             </Button>
           </div>
         </div>
-        <p className="mt-4 text-sm text-slate-600">
-          <Link href="/services" className="font-semibold text-brand">
-            Installation, training and service
-          </Link>
+        <p className="mt-4 flex items-center gap-2 text-sm font-medium text-[#111827]">
+          <Check className="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+          Free Installation, training and service
         </p>
       </aside>
       <div className="fixed inset-x-0 bottom-16 z-30 border-t border-slate-200 bg-white/95 p-3 backdrop-blur lg:hidden">

@@ -4,7 +4,7 @@ import type { CategoryWithCount } from "@/types";
 
 export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) {
   return (
-    <footer className="mt-16 border-t border-line bg-black text-on-dark">
+    <footer className="border-t border-line bg-black text-on-dark">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="font-display text-lg">Microvision Enterprises Ltd</p>
@@ -74,7 +74,6 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
           <ul className="mt-3 space-y-2 text-sm">
             <li><Link href="/legal/terms" className="hover:underline">Terms</Link></li>
             <li><Link href="/legal/privacy" className="hover:underline">Privacy</Link></li>
-            <li><Link href="/legal/returns" className="hover:underline">Returns and warranty</Link></li>
           </ul>
           <p className="mt-4 text-xs text-on-dark/70">Social profiles are not linked until the official accounts are confirmed.</p>
         </div>
@@ -85,7 +84,7 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
             © {site.catalogueAsOf.slice(0, 4)} Microvision Enterprises Ltd. Catalogue illustrations are placeholders.
           </p>
           <a href="https://codewithseth.co.ke" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs text-on-dark/80 hover:text-white">
-            <img src="/brand/smo.jpg" alt="" className="h-9 w-9 rounded-full bg-white object-cover" />
+            <img src="/brand/smo.jpg" alt="" className="h-6 w-6 rounded-full bg-white object-cover" />
             Built by codewithseth.co.ke
           </a>
         </div>

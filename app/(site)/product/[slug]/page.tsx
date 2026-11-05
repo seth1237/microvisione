@@ -74,7 +74,7 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
   const catalogueHref = catalogueDownloadHref({ id: product.id }, catalogues);
 
   return (
-    <Container className="bg-white pt-6 pb-40 lg:py-10">
+    <Container className="bg-white pt-6 pb-4 lg:py-10">
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -125,9 +125,9 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           </div>
         </div>
       </div>
-      <ProductFacts product={product} catalogueHref={catalogueHref} />
+      <ProductFacts key={product.id} product={product} catalogueHref={catalogueHref} />
       {related.length > 0 ? (
-        <section className="mt-12" aria-labelledby="related-heading">
+        <section className="mt-8" aria-labelledby="related-heading">
           <h2 id="related-heading" className="text-2xl">Related products</h2>
           <ul className="mt-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
             {related.map((item, index) => (
@@ -144,9 +144,6 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
         categoryId={category?.slug || product.categoryId}
         categoryName={category?.name || ""}
       />
-      <p className="mt-8 text-sm text-muted">
-        <Link href="/legal/returns" className="font-semibold text-brand">Returns and warranty</Link>
-      </p>
     </Container>
   );
 }

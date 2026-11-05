@@ -34,7 +34,7 @@ export default async function HomePage() {
       <WhySection />
       <ManufacturerCarousel items={manufacturers} />
 
-      <section className="bg-brand py-12 text-on-brand">
+      <section className="bg-brand py-12 text-on-brand -mb-16 lg:mb-0">
         <Container>
           <Reveal>
             <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">

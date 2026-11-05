@@ -101,6 +101,24 @@ h4 {
   transform: none;
 }
 
+.partners-marquee {
+  animation: partners-marquee 48s linear infinite;
+}
+
+.partners-marquee:hover {
+  animation-play-state: paused;
+}
+
+.partners-fade {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+}
+
+@keyframes partners-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
 .certification-marquee {
   animation: certification-marquee 36s linear infinite;
 }

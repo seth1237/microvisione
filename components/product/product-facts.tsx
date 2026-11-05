@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
+import type { ReactNode } from "react";
 import type { Product } from "@/types";
 
 function isPlaceholderCopy(value: string, name: string) {
@@ -29,6 +34,107 @@ function lines(value: string, name: string) {
     .filter((line) => line && !isPlaceholderCopy(line, name));
 }
 
+function StepsTable({ steps }: { steps: string[] }) {
+  return (
+    <table className="w-full text-sm">
+      <tbody>
+        {steps.map((step, index) => (
+          <tr key={step} className="border-b border-slate-200 last:border-b-0">
+            <th scope="row" className="w-8 py-2 pr-3 text-left align-top font-medium text-slate-500">{index + 1}</th>
+            <td className="py-2 text-[#111827]">{step}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ParametersTable({ rows }: { rows: { label: string; value: string }[] }) {
+  return (
+    <table className="w-full text-sm">
+      <tbody>
+        {rows.map((row) => (
+          <tr key={`${row.label}-${row.value}`} className="border-b border-slate-200 last:border-b-0">
+            <th scope="row" className="w-[46%] py-2 pr-3 text-left align-top font-medium text-[#111827]">{row.label || row.value}</th>
+            <td className="py-2 align-top text-[#111827]">{row.label ? row.value : ""}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SpecsTable({ specs }: { specs: string[] }) {
+  const rows = Math.ceil(specs.length / 2);
+  return (
+    <table className="w-full text-sm">
+      <tbody>
+        {Array.from({ length: rows }, (_, index) => {
+          const left = specs[index * 2];
+          const right = specs[index * 2 + 1];
+          return (
+            <tr key={left} className="border-b border-slate-200 last:border-b-0">
+              <td className="w-1/2 py-2 pr-4 text-[#111827]">{left}</td>
+              <td className="w-1/2 py-2 text-[#111827]">{right || ""}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function OverviewCopy({ paragraphs }: { paragraphs: string[] }) {
+  return (
+    <div className="space-y-2 text-sm leading-6 text-[#111827]">
+      {paragraphs.map((paragraph) => (
+        <p key={paragraph}>{paragraph}</p>
+      ))}
+    </div>
+  );
+}
+
+type Section = { id: string; title: string; wide?: boolean; content: ReactNode };
+
+function PhoneFacts({ sections }: { sections: Section[] }) {
+  const [openId, setOpenId] = useState(sections[0]?.id ?? "");
+
+  return (
+    <div className="mt-6 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 lg:hidden">
+      {sections.map((section) => {
+        const expanded = openId === section.id;
+        return (
+          <div key={section.id}>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-[#111827]"
+              aria-expanded={expanded}
+              onClick={() => setOpenId(expanded ? "" : section.id)}
+            >
+              {section.title}
+              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+            </button>
+            {expanded ? <div className="px-4 pb-4">{section.content}</div> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DesktopFacts({ sections }: { sections: Section[] }) {
+  return (
+    <div className="mt-8 hidden items-start gap-x-8 gap-y-6 lg:grid lg:grid-cols-2 xl:grid-cols-3">
+      {sections.map((section) => (
+        <section key={section.id} className={section.wide ? "lg:col-span-2 xl:col-span-3" : undefined}>
+          <h2 className="border-b border-slate-200 pb-2 text-sm font-semibold text-[#111827]">{section.title}</h2>
+          <div className="mt-1">{section.content}</div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function ProductFacts({ product, catalogueHref }: { product: Product; catalogueHref?: string }) {
   const overview = (product.longDescription || "")
     .split(/\n+/)
@@ -41,64 +147,24 @@ export function ProductFacts({ product, catalogueHref }: { product: Product; cat
     return match ? { label: match[1].trim(), value: match[2].trim() } : { label: "", value: line };
   });
   const installations = product.installations || [];
-  if (!overview.length && !specs.length && !steps.length && !parameters.length && !installations.length && !catalogueHref) return null;
+  const sections: Section[] = [];
+  if (overview.length) sections.push({ id: "overview", title: "Overview", content: <OverviewCopy paragraphs={overview} /> });
+  if (steps.length) sections.push({ id: "how-to-use", title: "How to use", content: <StepsTable steps={steps} /> });
+  if (parameters.length) sections.push({ id: "measuring", title: "Measuring parameters", content: <ParametersTable rows={parameters} /> });
+  if (specs.length) sections.push({ id: "specs", title: "Key specs", wide: true, content: <SpecsTable specs={specs} /> });
+  if (!sections.length && !installations.length && !catalogueHref) return null;
 
   return (
-    <div className="mt-10 space-y-8 border-t border-slate-200 pt-8 sm:mt-14">
-      {overview.length ? (
-        <section aria-labelledby="overview-heading">
-          <h2 id="overview-heading" className="text-lg font-semibold text-[#111827]">Overview</h2>
-          <div className="mt-3 max-w-3xl space-y-3 text-[15px] leading-7 text-[#111827]">
-            {overview.map((paragraph) => (
-              <p key={paragraph.slice(0, 48)}>{paragraph}</p>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {specs.length ? (
-        <section aria-labelledby="specs-heading">
-          <h2 id="specs-heading" className="text-lg font-semibold text-[#111827]">Key specs</h2>
-          <ul className="mt-3 grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2">
-            {specs.map((spec) => (
-              <li key={spec} className="bg-white px-4 py-3 text-sm text-[#111827]">{spec}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {steps.length ? (
-        <section aria-labelledby="use-heading">
-          <h2 id="use-heading" className="text-lg font-semibold text-[#111827]">How to use</h2>
-          <ol className="mt-3 max-w-3xl list-decimal space-y-2 pl-5 text-[15px] leading-7 text-[#111827]">
-            {steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
-      {parameters.length ? (
-        <section aria-labelledby="measure-heading">
-          <h2 id="measure-heading" className="text-lg font-semibold text-[#111827]">Measuring parameters</h2>
-          {parameters.some((row) => row.label) ? (
-            <dl className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200">
-              {parameters.map((row) => (
-                <div key={`${row.label}-${row.value}`} className="grid gap-1 px-4 py-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
-                  <dt className="text-sm font-medium text-[#111827]">{row.label || row.value}</dt>
-                  {row.label ? <dd className="text-sm text-[#111827]">{row.value}</dd> : null}
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <ul className="mt-3 max-w-3xl list-disc space-y-2 pl-5 text-[15px] leading-7">
-              {parameters.map((row) => (
-                <li key={row.value}>{row.value}</li>
-              ))}
-            </ul>
-          )}
-        </section>
+    <div>
+      {sections.length ? (
+        <>
+          <PhoneFacts sections={sections} />
+          <DesktopFacts sections={sections} />
+        </>
       ) : null}
       {installations.length ? (
-        <section aria-labelledby="install-heading">
-          <h2 id="install-heading" className="text-lg font-semibold text-[#111827]">Recent installations</h2>
+        <section className="mt-8" aria-labelledby="install-heading">
+          <h2 id="install-heading" className="text-sm font-semibold text-[#111827]">Recent installations</h2>
           <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {installations.map((photo) => (
               <li key={photo.url} className="overflow-hidden rounded-xl border border-slate-200 bg-[#F8FAFC]">
@@ -110,12 +176,11 @@ export function ProductFacts({ product, catalogueHref }: { product: Product; cat
         </section>
       ) : null}
       {catalogueHref ? (
-        <section aria-labelledby="catalogue-heading">
-          <h2 id="catalogue-heading" className="text-lg font-semibold text-[#111827]">Catalogue</h2>
-          <a href={catalogueHref} className="mt-3 inline-flex items-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-brand">
-            Download PDF
+        <p className="mt-8">
+          <a href={catalogueHref} className="inline-flex items-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-brand">
+            Download catalogue PDF
           </a>
-        </section>
+        </p>
       ) : null}
     </div>
   );
