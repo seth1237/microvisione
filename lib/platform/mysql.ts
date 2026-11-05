@@ -54,7 +54,7 @@ type SiteSettings = {
   updatedAt: Date
 }
 
-const MYSQL_SCHEMA_VERSION = 17
+const MYSQL_SCHEMA_VERSION = 18
 
 type MysqlState = {
   pool: Pool | null
@@ -510,6 +510,7 @@ async function applyMysqlSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   `)
   await mysqlAddColumnIfMissing('accord_nx_orders', 'customer_id', `customer_id INT UNSIGNED NULL`)
+  await mysqlAddColumnIfMissing('accord_nx_orders', 'receipt_emailed', `receipt_emailed TINYINT(1) NOT NULL DEFAULT 0`)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accord_nx_customers (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -1974,6 +1975,25 @@ export async function mysqlGetCheckoutOrderByCheckoutId(checkoutRequestId: strin
     [requestId],
   )
   return rows[0] ? mapCheckoutOrder(rows[0]) : null
+}
+
+export async function mysqlClaimReceiptEmail(orderId: string) {
+  const id = Number(orderId) || 0
+  if (!id) return false
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [result] = await pool.query<ResultSetHeader>(
+    `UPDATE accord_nx_orders SET receipt_emailed = 1, updated_at = ? WHERE id = ? AND status = 'paid' AND receipt_emailed = 0`,
+    [new Date(), id],
+  )
+  return result.affectedRows > 0
+}
+
+export async function mysqlReleaseReceiptEmail(orderId: string) {
+  const id = Number(orderId) || 0
+  if (!id) return
+  const pool = await getPool()
+  await pool.query('UPDATE accord_nx_orders SET receipt_emailed = 0 WHERE id = ?', [id])
 }
 
 export async function mysqlUpdateCheckoutOrder(id: string, updates: {

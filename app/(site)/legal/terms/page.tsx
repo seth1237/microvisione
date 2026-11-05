@@ -19,7 +19,7 @@ export default function TermsPage() {
           A price shown with the label “Example price” is not an offer to sell. Equipment marked “Request a quote” is priced only on a written quotation. A binding order exists when Microvision confirms it in writing, not when a form on this site shows a reference number.
         </p>
         <p>
-          Checkout, including the M-Pesa demonstration and the invoice option, does not collect money and does not create a supply contract until a payment gateway and order system are connected.
+          M-Pesa checkout collects money only after Safaricom confirms the prompt. An invoice request does not take a payment. A completed payment does not by itself replace a written supply agreement.
         </p>
         <p>
           Installation, training, calibration and repair are separate services. Their scope, response time and charge are stated on the service quotation.

@@ -3,16 +3,19 @@ import { checkoutAmount, maskPhone, normalizeKenyaPhone, parseCheckoutStatus, ty
 import { getCatalog } from '@/lib/platform/catalog-data'
 import {
   isMysqlConfigured,
+  mysqlClaimReceiptEmail,
   mysqlCreateCheckoutOrder,
   mysqlGetCheckoutOrder,
   mysqlGetCheckoutOrderByCheckoutId,
   mysqlGetCustomerById,
   mysqlGetCustomerByPhone,
   mysqlListCheckoutOrders,
+  mysqlReleaseReceiptEmail,
   mysqlReplaceProductCheckout,
   mysqlSetProductCheckout,
   mysqlUpdateCheckoutOrder,
 } from '@/lib/platform/mysql'
+import { sendPurchaseEmail } from '@/lib/platform/account-mail'
 import { isMpesaConfigured, mpesaStkPush, mpesaStkQuery, parseMpesaCallback } from '@/lib/platform/mpesa'
 
 export function publicCheckoutOrder(order: CheckoutOrder): Omit<CheckoutOrder, 'mpesaCheckoutId' | 'customerId'> {
@@ -95,7 +98,7 @@ export async function startCheckout(input: {
       phone,
       amount,
       reference: order.reference,
-      description: 'Accord order',
+      description: 'Microvision order',
     })
     const updated = await mysqlUpdateCheckoutOrder(order.id, {
       mpesaCheckoutId: push.checkoutRequestId,
@@ -119,6 +122,10 @@ export async function refreshCheckoutOrder(id: string) {
   if (!isMysqlConfigured()) return null
   const order = await mysqlGetCheckoutOrder(id)
   if (!order) return null
+  if (order.status === 'paid') {
+    await emailPaidOrder(id)
+    return publicCheckoutOrder(order)
+  }
   if (order.status !== 'pending' || !order.mpesaCheckoutId) return publicCheckoutOrder(order)
   let query: Awaited<ReturnType<typeof mpesaStkQuery>>
   try {
@@ -131,6 +138,7 @@ export async function refreshCheckoutOrder(id: string) {
     status: parseCheckoutStatus(query.status),
     mpesaResult: query.resultDesc,
   })
+  if (query.status === 'paid') await emailPaidOrder(id)
   return publicCheckoutOrder(updated || order)
 }
 
@@ -138,13 +146,18 @@ export async function applyMpesaCallback(body: unknown) {
   const parsed = parseMpesaCallback(body)
   if (!parsed.checkoutRequestId) return { ok: true }
   const order = await mysqlGetCheckoutOrderByCheckoutId(parsed.checkoutRequestId)
-  if (!order || order.status === 'paid') return { ok: true }
+  if (!order) return { ok: true }
+  if (order.status === 'paid') {
+    await emailPaidOrder(order.id)
+    return { ok: true }
+  }
   if (parsed.resultCode === 0) {
     await mysqlUpdateCheckoutOrder(order.id, {
       status: 'paid',
       mpesaReceipt: parsed.receipt,
       mpesaResult: parsed.resultDesc || 'Paid',
     })
+    await emailPaidOrder(order.id)
   } else if (parsed.resultCode === 1032) {
     await mysqlUpdateCheckoutOrder(order.id, {
       status: 'cancelled',
@@ -157,4 +170,19 @@ export async function applyMpesaCallback(body: unknown) {
     })
   }
   return { ok: true }
+}
+
+async function emailPaidOrder(orderId: string) {
+  const claimed = await mysqlClaimReceiptEmail(orderId)
+  if (!claimed) return
+  const order = await mysqlGetCheckoutOrder(orderId)
+  if (!order) return
+  const mailed = await sendPurchaseEmail({
+    to: order.email,
+    reference: order.reference,
+    amount: order.amount,
+    receipt: order.mpesaReceipt,
+    items: order.items.map((item) => `${item.name} × ${item.quantity}`),
+  })
+  if (!mailed.sent) await mysqlReleaseReceiptEmail(orderId)
 }

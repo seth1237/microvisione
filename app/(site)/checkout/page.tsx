@@ -5,7 +5,7 @@ import { utilityRobots } from "@/lib/seo";
 
 export const metadata = {
   title: "Checkout",
-  description: "Demonstration checkout with M-Pesa and institutional invoice options.",
+  description: "Checkout with M-Pesa STK push or an institutional invoice request.",
   robots: utilityRobots,
 };
 
@@ -14,7 +14,7 @@ export default function CheckoutPage() {
     <Container className="py-8">
       <PageIntro
         title="Checkout"
-        lede="Details, delivery, a simulated M-Pesa prompt or an invoice option, then review. No payment is taken."
+        lede="Details, delivery, then an M-Pesa prompt or an invoice request. Money is taken only after Safaricom confirms the prompt."
       />
       <div className="mt-8">
         <CheckoutWizard />
