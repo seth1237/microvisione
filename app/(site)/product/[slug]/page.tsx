@@ -13,7 +13,8 @@ import { Container } from "@/components/ui/container";
 import { liveCatalogues, liveProductBySlug } from "@/lib/api/live-catalogue";
 import { catalogueDownloadHref } from "@/lib/platform/content";
 import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
-import { absoluteUrl } from "@/lib/site";
+import { keywordList, metaText } from "@/lib/seo";
+import { absoluteUrl, site } from "@/lib/site";
 import type { Metadata } from "next";
 
 export const instant = false;
@@ -35,14 +36,29 @@ export async function generateMetadata({
   const { slug } = await params;
   const product = await loadProduct(slug);
   if (!product) return { title: "Product" };
+  const written = product.seo?.title?.trim();
+  const title = written || product.name;
+  const branded = Boolean(written && /microvision/i.test(written));
+  const description = metaText(product.seo?.description || product.shortDescription);
+  const keywords = keywordList(product.seo?.keywords);
+  const image = product.photoUrl;
+  const alt = product.seo?.imageAlt || product.name;
   return {
-    title: product.name,
-    description: product.shortDescription,
+    title: branded ? { absolute: title } : title,
+    description,
+    keywords,
     alternates: { canonical: `/product/${product.slug}` },
     openGraph: {
-      title: product.name,
-      description: product.shortDescription,
+      title,
+      description,
       url: `/product/${product.slug}`,
+      images: image ? [{ url: image, alt }] : undefined,
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: image ? [image] : undefined,
     },
   };
 }
@@ -80,11 +96,43 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           "@context": "https://schema.org",
           "@type": "Product",
           name: product.name,
-          description: product.shortDescription,
+          description: metaText(product.seo?.description || product.shortDescription, 500),
           sku: product.id,
           category: category?.name,
-          brand: { "@type": "Brand", name: brand?.name ?? "Manufacturer TBC" },
+          image: product.photoUrl ? [absoluteUrl(product.photoUrl)] : undefined,
+          ...(maker ? { brand: { "@type": "Brand", name: maker } } : {}),
           url,
+          offers: product.price
+            ? {
+                "@type": "Offer",
+                priceCurrency: "KES",
+                price: product.price,
+                availability:
+                  product.stockStatus === "in_stock"
+                    ? "https://schema.org/InStock"
+                    : "https://schema.org/PreOrder",
+                url,
+                seller: { "@type": "Organization", name: site.name },
+              }
+            : undefined,
+        }}
+      />
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
+            ...(category
+              ? [{ "@type": "ListItem", position: 2, name: category.name, item: absoluteUrl(`/category/${category.slug}`) }]
+              : []),
+            {
+              "@type": "ListItem",
+              position: category ? 3 : 2,
+              name: product.name,
+              item: url,
+            },
+          ],
         }}
       />
       <Breadcrumbs
@@ -97,6 +145,7 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
       <div className="mt-5 grid items-start gap-6 lg:mt-8 lg:grid-cols-2 lg:gap-12">
         <ProductGallery
           name={product.name}
+          alt={product.seo?.imageAlt}
           photos={product.photos?.length ? product.photos : product.photoUrl ? [{ url: product.photoUrl, caption: "" }] : []}
         />
         <div className="lg:sticky lg:top-24">

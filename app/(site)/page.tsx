@@ -8,6 +8,15 @@ import { getCategories, getProducts } from "@/lib/api/products";
 import { liveManufacturers } from "@/lib/api/site-media";
 import { site, whatsAppHref } from "@/lib/site";
 
+export const metadata = {
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "Medical and laboratory equipment in Kenya",
+    description: site.positioning,
+    url: "/",
+  },
+};
+
 export default async function HomePage() {
   const [categories, products, manufacturers] = await Promise.all([
     getCategories(),

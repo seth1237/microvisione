@@ -37,6 +37,7 @@ export function SiteHeader() {
   const { categories } = useCatalogue();
   const [companyOpen, setCompanyOpen] = useState(false);
   const [compact, setCompact] = useState(false);
+  const [phoneSearchHidden, setPhoneSearchHidden] = useState(false);
   const [clipNav, setClipNav] = useState(false);
   const compactRef = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
@@ -121,6 +122,46 @@ export function SiteHeader() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       desktop.removeEventListener("change", onDesktop);
+      window.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    const phone = window.matchMedia("(max-width: 1023px)");
+    let lastY = window.scrollY;
+    let hidden = false;
+    let frame = 0;
+
+    const show = (next: boolean) => {
+      if (hidden === next) return;
+      hidden = next;
+      setPhoneSearchHidden(next);
+    };
+
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const y = window.scrollY;
+        const delta = y - lastY;
+        lastY = y;
+        const search = headerRef.current?.querySelector("[data-phone-search]");
+        const typing = Boolean(search && document.activeElement && search.contains(document.activeElement));
+        if (!phone.matches || y < 16 || typing) {
+          show(false);
+          return;
+        }
+        if (delta > 6) show(true);
+        else if (delta < -6) show(false);
+      });
+    };
+
+    const onPhone = () => show(false);
+    phone.addEventListener("change", onPhone);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      phone.removeEventListener("change", onPhone);
       window.removeEventListener("scroll", onScroll);
       if (frame) window.cancelAnimationFrame(frame);
     };
@@ -238,13 +279,23 @@ export function SiteHeader() {
         </div>
       </div>
 
-      <div className="px-3 pb-3 lg:hidden">
-        <SearchBox
-          listId="header-search-list-phone"
-          placeholder="Search"
-          inputClassName="rounded-full border-transparent bg-paper pl-10"
-          menuClassName="rounded-2xl shadow-none"
-        />
+      <div
+        data-phone-search
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-300 ease-out lg:hidden",
+          phoneSearchHidden ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
+        )}
+      >
+        <div className={cn("min-h-0", phoneSearchHidden ? "overflow-hidden" : "overflow-visible")}>
+          <div className="px-3 pb-3">
+            <SearchBox
+              listId="header-search-list-phone"
+              placeholder="Search"
+              inputClassName="rounded-full border-transparent bg-paper pl-10"
+              menuClassName="rounded-2xl shadow-none"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="mv-nav-fold hidden lg:grid">

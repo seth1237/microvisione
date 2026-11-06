@@ -41,7 +41,8 @@ export async function catalogueMetadata(options: {
     description: options.description,
     alternates: { canonical },
     robots: filtered ? { index: false, follow: true } : { index: true, follow: true },
-    openGraph: { title, description: options.description, url: canonical },
+    openGraph: { title, description: options.description, url: canonical, type: "website" },
+    twitter: { card: "summary", title, description: options.description },
     pagination: filtered
       ? undefined
       : {
@@ -58,3 +59,19 @@ export async function catalogueMetadata(options: {
 }
 
 export const utilityRobots: Metadata["robots"] = { index: false, follow: false };
+
+export function metaText(value: string, max = 158) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max - 1);
+  const word = cut.replace(/\s+\S*$/, "");
+  return `${word || cut}…`;
+}
+
+export function keywordList(value: string | undefined) {
+  const items = String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+}

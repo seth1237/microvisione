@@ -77,6 +77,13 @@ export interface Product {
   howToUse?: string;
   measuringParameters?: string;
   distributedFor?: string;
+  /** Titles and descriptions entered in the admin SEO panel. */
+  seo?: {
+    title: string;
+    description: string;
+    keywords: string;
+    imageAlt: string;
+  };
 }
 
 export interface Category {

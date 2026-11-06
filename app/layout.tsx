@@ -52,10 +52,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd
           data={{
             "@context": "https://schema.org",
-            "@type": "Organization",
+            "@type": ["Organization", "MedicalBusiness"],
             name: site.name,
             url: site.url,
             telephone: site.phoneTel,
+            email: site.email,
+            description: site.positioning,
+            areaServed: "KE",
             address: {
               "@type": "PostalAddress",
               streetAddress: "Loipi Plaza, Lunga Lunga Road",
@@ -63,6 +66,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               addressRegion: "Nairobi",
               addressCountry: "KE",
             },
+            openingHoursSpecification: [
+              {
+                "@type": "OpeningHoursSpecification",
+                dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+                opens: "08:00",
+                closes: "17:00",
+              },
+              {
+                "@type": "OpeningHoursSpecification",
+                dayOfWeek: "Saturday",
+                opens: "08:00",
+                closes: "13:00",
+              },
+            ],
           }}
         />
       </body>

@@ -27,6 +27,12 @@ type LiveProduct = {
   measuringParameters?: string;
   distributedFor?: string;
   imageAssets?: Array<{ secureUrl?: string; installation?: boolean }>;
+  seo?: {
+    seoTitle?: string;
+    seoDescription?: string;
+    seoKeywords?: string;
+    imageAlt?: string;
+  };
 };
 
 type LiveCategory = {
@@ -150,6 +156,14 @@ function toProduct(item: LiveProduct): Product {
     tags: [],
     featured: item.featured,
     faqs: [],
+    seo: item.seo
+      ? {
+          title: item.seo.seoTitle || "",
+          description: item.seo.seoDescription || "",
+          keywords: item.seo.seoKeywords || "",
+          imageAlt: item.seo.imageAlt || "",
+        }
+      : undefined,
   };
 }
 

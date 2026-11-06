@@ -6,9 +6,11 @@ import { X } from "lucide-react";
 
 export function ProductGallery({
   name,
+  alt,
   photos,
 }: {
   name: string;
+  alt?: string;
   photos: { url: string; caption: string }[];
 }) {
   const [active, setActive] = useState(0);
@@ -24,7 +26,7 @@ export function ProductGallery({
   return (
     <div>
       <figure className="overflow-hidden rounded-2xl border border-slate-200 bg-[#F8FAFC]">
-        <img src={current.url} alt={current.caption || name} className="aspect-square w-full object-contain p-4 sm:aspect-[4/3] sm:p-8" />
+        <img src={current.url} alt={current.caption || alt || name} className="aspect-square w-full object-contain p-4 sm:aspect-[4/3] sm:p-8" />
         {current.caption ? <figcaption className="border-t border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">{current.caption}</figcaption> : null}
       </figure>
       {photos.length > 1 ? (
@@ -35,7 +37,7 @@ export function ProductGallery({
               type="button"
               onClick={() => setActive(index)}
               className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-[#F8FAFC] ${index === active ? "border-brand" : "border-slate-200"}`}
-              aria-label={photo.caption || `Photo ${index + 1}`}
+              aria-label={photo.caption || alt || `Photo ${index + 1}`}
             >
               <img src={photo.url} alt="" className="h-full w-full object-contain" />
             </button>
