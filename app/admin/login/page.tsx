@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -27,8 +25,7 @@ export default function AdminLoginPage() {
       setError(payload.message || "Could not sign in");
       return;
     }
-    router.push("/admin");
-    router.refresh();
+    window.location.assign("/admin");
   }
 
   return (
