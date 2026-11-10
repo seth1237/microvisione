@@ -9,7 +9,7 @@ import { PurchasePanel } from "@/components/product/purchase-panel";
 import { WhiteCanvas } from "@/components/product/white-canvas";
 import { JsonLd } from "@/components/seo/json-ld";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { Container } from "@/components/ui/container";
+import { CategorySidebar } from "@/components/home/home-catalogue";
 import { liveCatalogues, liveProductBySlug } from "@/lib/api/live-catalogue";
 import { catalogueDownloadHref } from "@/lib/platform/content";
 import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
@@ -76,22 +76,33 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
   const { slug } = await params;
   const product = await loadProduct(slug);
   if (!product) notFound();
-  const [brands, categories, related, catalogues] = await Promise.all([
+  const [brands, categories, catalogue, related, catalogues] = await Promise.all([
     getBrands(),
     getCategories(),
+    getProducts(),
     getRelatedProducts(product),
     liveCatalogues(),
   ]);
   const brand = brands.find((item) => item.id === product.brandId);
-  const category = categories.find((item) => item.id === product.categoryId);
+  const category = categories.find((item) => item.id === product.categoryId || item.slug === product.categoryId);
   const brandName = brand && !/tbc/i.test(brand.name) ? brand.name : "";
-  const suppliedTo = (product.distributedFor || "").split(/\s{2,}|[,;\n|]/).map((item) => item.trim()).filter(Boolean);
-  const maker = suppliedTo.length > 1 ? brandName : product.distributedFor || brandName;
+  const maker = brandName;
   const url = absoluteUrl(`/product/${product.slug}`);
   const catalogueHref = catalogueDownloadHref({ id: product.id }, catalogues);
 
   return (
-    <Container className="bg-white pt-6 pb-4 lg:py-10">
+    <div className="mx-auto w-full max-w-[1600px] bg-white px-3 pt-6 pb-4 sm:px-6 lg:px-8 lg:py-10">
+      <div className="grid items-start gap-6 lg:grid-cols-[16.5rem_minmax(0,1fr)] lg:gap-6">
+        <CategorySidebar
+          categories={categories}
+          products={catalogue}
+          activeId={category?.id ?? null}
+          activeSlug={category?.slug || ""}
+          currentSlug={product.slug}
+          linkCategories
+          className="sticky top-36 hidden lg:block"
+        />
+        <div className="min-w-0">
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -150,11 +161,7 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           photos={product.photos?.length ? product.photos : product.photoUrl ? [{ url: product.photoUrl, caption: "" }] : []}
         />
         <div className="lg:sticky lg:top-24">
-          {maker ? (
-            <p className="text-sm text-slate-500">
-              {product.distributedFor ? `Distributed for ${product.distributedFor}` : maker}
-            </p>
-          ) : null}
+          {brandName ? <p className="text-sm text-slate-500">{brandName}</p> : null}
           <div className="mt-1 flex items-start justify-between gap-3">
             <h1 className="text-2xl font-semibold tracking-tight text-[#111827] sm:text-3xl">{product.name}</h1>
             <ProductShare
@@ -188,12 +195,14 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           </ul>
         </section>
       ) : null}
+        </div>
+      </div>
       <ProductView
         productId={product.id}
         productName={product.name}
         categoryId={category?.slug || product.categoryId}
         categoryName={category?.name || ""}
       />
-    </Container>
+    </div>
   );
 }

@@ -91,12 +91,14 @@ export function HomeCatalogue({
   );
 }
 
-function CategorySidebar({
+export function CategorySidebar({
   categories,
   products,
   activeId,
   activeSlug = "",
   onSelect,
+  linkCategories = false,
+  currentSlug = "",
   showTitle = true,
   className,
 }: {
@@ -104,11 +106,27 @@ function CategorySidebar({
   products: Product[];
   activeId: string | null;
   activeSlug?: string;
-  onSelect: (id: string | null) => void;
+  onSelect?: (id: string | null) => void;
+  linkCategories?: boolean;
+  currentSlug?: string;
   showTitle?: boolean;
   className?: string;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const router = useRouter();
+  const [expanded, setExpanded] = useState<string | null>(activeId);
+
+  function selectCategory(id: string | null) {
+    if (linkCategories) {
+      if (!id) {
+        router.push("/");
+        return;
+      }
+      const category = categories.find((item) => item.id === id);
+      if (category) router.push(`/category/${category.slug}`);
+      return;
+    }
+    onSelect?.(id);
+  }
 
   return (
     <aside className={cn("overflow-hidden rounded-md border border-[#1211bb]/30 bg-white shadow-sm", className)}>
@@ -124,7 +142,7 @@ function CategorySidebar({
             "flex w-full items-center justify-between border-b border-line px-4 py-3 text-left text-[13px] font-semibold",
             activeId === null ? "bg-brand-soft text-brand" : "text-ink hover:bg-[#F8FAFC]",
           )}
-          onClick={() => onSelect(null)}
+          onClick={() => selectCategory(null)}
         >
           All products
           <span className="text-[11px] text-muted">{products.length}</span>
@@ -139,7 +157,7 @@ function CategorySidebar({
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left text-[13px] font-semibold"
-                  onClick={() => onSelect(category.id)}
+                  onClick={() => selectCategory(category.id)}
                 >
                   <CategoryGlyph name={category.icon} className="h-4 w-4 shrink-0" />
                   <span className="truncate">{category.name}</span>
@@ -161,7 +179,10 @@ function CategorySidebar({
                     <li key={product.id}>
                       <Link
                         href={`/product/${product.slug}`}
-                        className="block truncate px-4 py-1.5 text-[12px] text-[#334155] hover:bg-white hover:text-brand"
+                        className={cn(
+                          "block truncate px-4 py-1.5 text-[12px] hover:bg-white hover:text-brand",
+                          product.slug === currentSlug ? "bg-white font-semibold text-brand" : "text-[#334155]",
+                        )}
                       >
                         {product.name}
                       </Link>
