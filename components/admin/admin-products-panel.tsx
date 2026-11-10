@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CreditCard, Eye, EyeOff, Trash2 } from 'lucide-react'
 import type { CatalogCategory, CatalogProduct } from '@/lib/platform/catalog'
 import { formatKes, productImageSrc, slugifyName } from '@/lib/platform/catalog'
+import { embedProductExtras, readProductExtras } from '@/lib/platform/product-extras'
 import type { Catalogue } from '@/lib/platform/content'
 import { CatalogueDownloadLink } from '@/components/admin/catalogue-download'
 
@@ -86,7 +87,15 @@ export function AdminProductsPanel({
   }
 
   function detailValue(product: CatalogProduct) {
-    return details[product.id] ?? product.details ?? product.description ?? ''
+    return details[product.id] ?? readProductExtras(product.details || product.description || '').details
+  }
+
+  function howToUseValue(product: CatalogProduct) {
+    return howToUse[product.id] ?? product.howToUse ?? readProductExtras(product.details || '').howToUse
+  }
+
+  function measuringValue(product: CatalogProduct) {
+    return measuringParameters[product.id] ?? product.measuringParameters ?? readProductExtras(product.details || '').measuringParameters
   }
 
   function highlightValue(product: CatalogProduct) {
@@ -161,25 +170,32 @@ export function AdminProductsPanel({
   async function saveDetails(productId: string) {
     const product = products.find((item) => item.id === productId)
     const name = (names[productId] ?? product?.name ?? '').trim()
+    if (!product) {
+      setMessage('Product not found')
+      return
+    }
     if (!name) {
       setMessage('Enter a product name')
       return
     }
     setBusyId(productId)
+    const how = howToUseValue(product)
+    const measuring = measuringValue(product)
+    const overview = detailValue(product)
     const response = await fetch(`/api/admin/products/${encodeURIComponent(productId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
-        details: details[productId] ?? (product?.details || ''),
+        details: embedProductExtras(overview, { howToUse: how, measuringParameters: measuring }),
         distributedFor: distributedFor[productId] ?? (product?.distributedFor || ''),
         highlights: (highlights[productId] ?? (product?.highlights || []).join('\n'))
           .split(/\n+/)
           .map((line) => line.trim())
           .filter(Boolean)
           .slice(0, 8),
-        howToUse: howToUse[productId] ?? product?.howToUse ?? '',
-        measuringParameters: measuringParameters[productId] ?? product?.measuringParameters ?? '',
+        howToUse: how,
+        measuringParameters: measuring,
       }),
     })
     const payload = await response.json()
@@ -448,7 +464,7 @@ export function AdminProductsPanel({
                     <label>
                       How to use
                       <textarea
-                        value={howToUse[product.id] ?? product.howToUse ?? ''}
+                        value={howToUseValue(product)}
                         onChange={(event) => setHowToUse((current) => ({ ...current, [product.id]: event.target.value }))}
                         rows={5}
                         placeholder={'One step per line.\nSwitch the meter on\nInsert a strip\nApply the sample'}
@@ -457,7 +473,7 @@ export function AdminProductsPanel({
                     <label>
                       Measuring parameters
                       <textarea
-                        value={measuringParameters[product.id] ?? product.measuringParameters ?? ''}
+                        value={measuringValue(product)}
                         onChange={(event) => setMeasuringParameters((current) => ({ ...current, [product.id]: event.target.value }))}
                         rows={5}
                         placeholder={'One parameter per line. Use a colon for the value.\nGlucose: 20–600 mg/dL\nSample: Capillary blood'}

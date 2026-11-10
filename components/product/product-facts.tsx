@@ -63,14 +63,14 @@ function parameterRows(value: string, name: string) {
   });
 }
 
-function ParameterButtons({ rows }: { rows: { label: string; value: string }[] }) {
+function ParameterButtons({ rows, label = "Parameters" }: { rows: { label: string; value: string }[]; label?: string }) {
   const [open, setOpen] = useState<number | null>(rows.length === 1 && rows[0]?.label ? 0 : null);
   const selected = open === null ? null : rows[open];
 
   return (
-    <section aria-label="Measuring parameters">
-      <h2 className="text-xs font-semibold text-slate-500">Parameters</h2>
-      <ul className="mt-2 flex flex-wrap gap-1.5">
+    <section aria-label={label || undefined}>
+      {label ? <h2 className="text-xs font-semibold text-slate-500">{label}</h2> : null}
+      <ul className={`${label ? "mt-2" : ""} flex flex-wrap gap-1.5`}>
         {rows.map((row, index) => {
           const name = row.label || row.value;
           const selectedChip = open === index;
@@ -181,8 +181,14 @@ export function ProductFacts({ product, catalogueHref }: { product: Product; cat
   const parameters = parameterRows(product.measuringParameters || "", product.name);
   const installations = product.installations || [];
   const sections: Section[] = [];
+  const suppliedTo = (product.distributedFor || "")
+    .split(/\s{2,}|[,;\n|]/)
+    .map((item) => item.trim())
+    .filter((item) => item && !isPlaceholderCopy(item, product.name));
   if (overview.length) sections.push({ id: "overview", title: "Overview", content: <OverviewCopy paragraphs={overview} /> });
-  if (steps.length) sections.push({ id: "how-to-use", title: "How to use", content: <StepsTable steps={steps} /> });
+  if (steps.length === 1) sections.push({ id: "how-to-use", title: "How to use", content: <p className="pt-2 text-sm leading-6 text-[#111827]">{steps[0]}</p> });
+  else if (steps.length) sections.push({ id: "how-to-use", title: "How to use", content: <StepsTable steps={steps} /> });
+  if (suppliedTo.length > 1) sections.push({ id: "supplied-to", title: "Supplied to", content: <ParameterButtons label="" rows={suppliedTo.map((item) => ({ label: "", value: item }))} /> });
   if (specs.length) sections.push({ id: "specs", title: "Key specs", wide: true, content: <SpecsTable specs={specs} /> });
   if (!sections.length && !parameters.length && !installations.length && !catalogueHref) return null;
 

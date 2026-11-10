@@ -85,7 +85,8 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
   const brand = brands.find((item) => item.id === product.brandId);
   const category = categories.find((item) => item.id === product.categoryId);
   const brandName = brand && !/tbc/i.test(brand.name) ? brand.name : "";
-  const maker = product.distributedFor || brandName;
+  const suppliedTo = (product.distributedFor || "").split(/\s{2,}|[,;\n|]/).map((item) => item.trim()).filter(Boolean);
+  const maker = suppliedTo.length > 1 ? brandName : product.distributedFor || brandName;
   const url = absoluteUrl(`/product/${product.slug}`);
   const catalogueHref = catalogueDownloadHref({ id: product.id }, catalogues);
 

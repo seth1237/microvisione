@@ -4,6 +4,7 @@ import { cacheLife } from "next/cache";
 import { brands as knownBrands } from "@/data/brands";
 import { categories as knownCategories } from "@/data/categories";
 import { accordApiPath, catalogueApiSelected, publicAssetUrl } from "@/lib/platform/backend-url";
+import { readProductExtras } from "@/lib/platform/product-extras";
 import { parseEventBody } from "@/lib/platform/event-body";
 import type { BrandWithCount, CatalogueEvent, CategoryWithCount, Job, Offer, Product, SearchHit } from "@/types";
 
@@ -126,6 +127,7 @@ function toProduct(item: LiveProduct): Product {
     .filter((url): url is string => Boolean(url) && !installationUrls.has(url));
   const photos = [...new Set(assetPhotos.length ? assetPhotos : listedPhotos)].map((url) => ({ url, caption: "" }));
   const installations = [...installationUrls].map((url) => ({ url: url as string, caption: "" }));
+  const extras = readProductExtras(item.details || "");
   return {
     id: item.id,
     slug: item.slug,
@@ -133,7 +135,7 @@ function toProduct(item: LiveProduct): Product {
     brandId: brand?.id || slugify(item.manufacturer || "manufacturer"),
     categoryId: category?.id || item.categoryId,
     shortDescription: item.description || `${item.name} from Microvision Enterprises Ltd.`,
-    longDescription: item.details || item.description || item.name,
+    longDescription: extras.details || item.description || item.name,
     images: [{ variant: "primary", alt: item.name }],
     photoUrl: photos[0]?.url,
     photos,
@@ -142,8 +144,8 @@ function toProduct(item: LiveProduct): Product {
     features: Array.isArray(item.highlights)
       ? item.highlights.map((entry) => String(entry || "").trim()).filter(Boolean)
       : [],
-    howToUse: item.howToUse || "",
-    measuringParameters: item.measuringParameters || "",
+    howToUse: item.howToUse || extras.howToUse,
+    measuringParameters: item.measuringParameters || extras.measuringParameters,
     distributedFor: item.distributedFor || "",
     purchaseMode: item.checkout && price > 0 ? "both" : "quote",
     price: price > 0 ? price : undefined,
