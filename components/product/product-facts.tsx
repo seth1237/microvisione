@@ -49,18 +49,54 @@ function StepsTable({ steps }: { steps: string[] }) {
   );
 }
 
-function ParametersTable({ rows }: { rows: { label: string; value: string }[] }) {
+function parameterRows(value: string, name: string) {
+  return value.split(/\n+/).flatMap((line) => {
+    const cleaned = line.replace(/^\s*[-*•]\s*/, "").replace(/^\s*\d+[.)]\s*/, "").trim();
+    if (!cleaned || isPlaceholderCopy(cleaned, name)) return [];
+    if (!/[:|]/.test(cleaned) && /[,;]/.test(cleaned)) {
+      return cleaned.split(/[,;]/).map((part) => part.trim()).filter((part) => part && !isPlaceholderCopy(part, name));
+    }
+    return [cleaned];
+  }).map((line) => {
+    const match = line.match(/^(.{1,48}?)\s*[:|]\s+(.+)$/);
+    return match ? { label: match[1].trim(), value: match[2].trim() } : { label: "", value: line };
+  });
+}
+
+function ParameterButtons({ rows }: { rows: { label: string; value: string }[] }) {
+  const [open, setOpen] = useState<number | null>(rows.length === 1 && rows[0]?.label ? 0 : null);
+  const selected = open === null ? null : rows[open];
+
   return (
-    <table className="w-full text-sm">
-      <tbody>
-        {rows.map((row) => (
-          <tr key={`${row.label}-${row.value}`} className="border-b border-slate-200 last:border-b-0">
-            <th scope="row" className="w-[46%] py-2 pr-3 text-left align-top font-medium text-[#111827]">{row.label || row.value}</th>
-            <td className="py-2 align-top text-[#111827]">{row.label ? row.value : ""}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <section aria-label="Measuring parameters">
+      <h2 className="text-xs font-semibold text-slate-500">Parameters</h2>
+      <ul className="mt-2 flex flex-wrap gap-1.5">
+        {rows.map((row, index) => {
+          const name = row.label || row.value;
+          const selectedChip = open === index;
+          const className = `rounded-md border px-2 py-1 text-xs font-medium leading-4 ${
+            selectedChip ? "border-brand bg-brand text-white" : "border-slate-200 bg-[#F8FAFC] text-[#111827]"
+          }`;
+          if (!row.value || !row.label) {
+            return (
+              <li key={`${name}-${index}`}>
+                <span className={className}>{name}</span>
+              </li>
+            );
+          }
+          return (
+            <li key={`${name}-${index}`}>
+              <button type="button" className={className} aria-pressed={selectedChip} onClick={() => setOpen(selectedChip ? null : index)}>
+                {name}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {selected?.label && selected.value ? (
+        <p className="mt-2 text-xs text-slate-600">{selected.label}: {selected.value}</p>
+      ) : null}
+    </section>
   );
 }
 
@@ -142,20 +178,21 @@ export function ProductFacts({ product, catalogueHref }: { product: Product; cat
     .filter((paragraph) => paragraph && !isPlaceholderCopy(paragraph, product.name));
   const specs = product.features.filter((feature) => feature.trim() && !isPlaceholderCopy(feature, product.name));
   const steps = lines(product.howToUse || "", product.name);
-  const parameters = lines(product.measuringParameters || "", product.name).map((line) => {
-    const match = line.match(/^(.{2,48}?)\s*[:|]\s+(.+)$/);
-    return match ? { label: match[1].trim(), value: match[2].trim() } : { label: "", value: line };
-  });
+  const parameters = parameterRows(product.measuringParameters || "", product.name);
   const installations = product.installations || [];
   const sections: Section[] = [];
   if (overview.length) sections.push({ id: "overview", title: "Overview", content: <OverviewCopy paragraphs={overview} /> });
   if (steps.length) sections.push({ id: "how-to-use", title: "How to use", content: <StepsTable steps={steps} /> });
-  if (parameters.length) sections.push({ id: "measuring", title: "Measuring parameters", content: <ParametersTable rows={parameters} /> });
   if (specs.length) sections.push({ id: "specs", title: "Key specs", wide: true, content: <SpecsTable specs={specs} /> });
-  if (!sections.length && !installations.length && !catalogueHref) return null;
+  if (!sections.length && !parameters.length && !installations.length && !catalogueHref) return null;
 
   return (
     <div>
+      {parameters.length ? (
+        <div className="mt-6">
+          <ParameterButtons rows={parameters} />
+        </div>
+      ) : null}
       {sections.length ? (
         <>
           <PhoneFacts sections={sections} />
