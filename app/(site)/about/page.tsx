@@ -1,3 +1,4 @@
+import { ProfileBook } from "@/components/about/profile-book";
 import { Reveal } from "@/components/motion/reveal";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
@@ -39,17 +40,10 @@ export default async function AboutPage() {
       </div>
       </Reveal>
       {profilePages.length ? (
-        <Reveal>
-          <section className="mt-10 max-w-3xl space-y-8" aria-label="Company profile">
-            {profilePages.map((page) => (
-              <article key={page.id}>
-                <h2 className="text-2xl">{page.title}</h2>
-                {page.imageUrl ? <img src={page.imageUrl} alt="" className="mt-4 w-full rounded-md object-cover" /> : null}
-                {page.body ? <p className="mt-3 whitespace-pre-line">{page.body}</p> : null}
-              </article>
-            ))}
-          </section>
-        </Reveal>
+        <section className="mt-10" aria-labelledby="company-profile">
+          <h2 id="company-profile" className="text-2xl">Company profile</h2>
+          <ProfileBook pages={profilePages} />
+        </section>
       ) : null}
       {certificates.length ? (
         <Reveal>

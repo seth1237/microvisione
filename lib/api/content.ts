@@ -53,7 +53,7 @@ export async function getCompanyProfilePages() {
     const response = await fetch(accordApiPath("/api/company-profile"));
     if (!response.ok) return [];
     const payload = (await response.json()) as {
-      data?: Array<{ _id: string; title: string; body: string; image?: { secureUrl?: string } | null; published?: boolean }>;
+      data?: Array<{ _id: string; title: string; body: string; order?: number; image?: { secureUrl?: string } | null; published?: boolean }>;
     };
     return (payload.data || [])
       .filter((page) => page.published !== false && page.title)
@@ -61,8 +61,10 @@ export async function getCompanyProfilePages() {
         id: page._id,
         title: page.title,
         body: page.body || "",
+        order: Number(page.order) || 0,
         imageUrl: publicAssetUrl(page.image?.secureUrl),
-      }));
+      }))
+      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   } catch {
     return [];
   }

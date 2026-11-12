@@ -116,28 +116,28 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
       <form className="admin-editor" onSubmit={addManufacturer}>
         <label>
           Manufacturer
-          <input name="companyName" value={draft.companyName} onChange={(event) => setDraft({ ...draft, companyName: event.target.value })} placeholder="Company name" />
+          <input name="companyName" value={draft.companyName} onChange={(event) => setDraft({ ...draft, companyName: event.target.value })} placeholder="Company name" required />
         </label>
         <label>
           Logo
-          <input name="logo" type="file" accept="image/*" onChange={(event) => setLogoName(event.target.files?.[0]?.name || '')} />
+          <input name="logo" type="file" accept="image/*" onChange={(event) => setLogoName(event.target.files?.[0]?.name || '')} required />
           {logoName ? <span className="text-muted-foreground">{logoName}</span> : null}
         </label>
         <label>
-          Contact
-          <input name="contactName" value={draft.contactName} onChange={(event) => setDraft({ ...draft, contactName: event.target.value })} />
+          Contact <span className="text-muted-foreground">(optional)</span>
+          <input name="contactName" value={draft.contactName} onChange={(event) => setDraft({ ...draft, contactName: event.target.value })} placeholder="Optional" />
         </label>
         <label>
-          Phone
-          <input name="phone" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} />
+          Phone <span className="text-muted-foreground">(optional)</span>
+          <input name="phone" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} placeholder="Optional" />
         </label>
         <label>
-          Email
-          <input name="email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
+          Email <span className="text-muted-foreground">(optional)</span>
+          <input name="email" type="text" inputMode="email" autoComplete="off" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} placeholder="Optional" />
         </label>
         <label>
-          Products supplied
-          <input name="productsOfInterest" value={draft.productsOfInterest} onChange={(event) => setDraft({ ...draft, productsOfInterest: event.target.value })} />
+          Products supplied <span className="text-muted-foreground">(optional)</span>
+          <input name="productsOfInterest" value={draft.productsOfInterest} onChange={(event) => setDraft({ ...draft, productsOfInterest: event.target.value })} placeholder="Optional" />
         </label>
         <button className="button button-primary button-compact" disabled={busy} type="submit">Add manufacturer</button>
       </form>
