@@ -2,7 +2,8 @@ import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { accordApiPath } from '@/lib/platform/backend-url'
 import type { Catalog, CatalogProduct } from '@/lib/platform/catalog'
-import type { Catalogue, CompanyProfilePage, EventPost, Installation, ManufacturerSubmission, Offer, RedirectRule } from '@/lib/platform/content'
+import type { Catalogue, CertificationLogo, CompanyProfilePage, EventPost, Installation, ManufacturerSubmission, Offer, RedirectRule } from '@/lib/platform/content'
+import { isPartnerLogo, partnerDisplayName } from '@/lib/platform/partner-logos'
 import type { JobApplication, JobPost } from '@/lib/platform/jobs'
 import { emptySearchReport, parsePeriod as parseSearchPeriod, parseSearchKind, type SearchKind } from '@/lib/platform/search-analytics'
 import { emptyVisitorReport, parsePeriod, type VisitorPeriod } from '@/lib/platform/visitor-report'
@@ -196,8 +197,35 @@ export async function listRedirects(): Promise<RedirectRule[]> {
 }
 
 export async function listManufacturers() {
-  const payload = await backendJson<{ data: ManufacturerSubmission[] }>('/api/admin/manufacturers')
-  return payload?.data || []
+  const [payload, certificates] = await Promise.all([
+    backendJson<{ data: ManufacturerSubmission[] }>('/api/admin/manufacturers'),
+    backendJson<{ data: CertificationLogo[] }>('/api/admin/certifications'),
+  ])
+  const saved = payload?.data || []
+  const names = new Set(saved.map((item) => item.companyName.toLowerCase()))
+  const partners = (certificates?.data || []).flatMap((item) => {
+    const companyName = partnerDisplayName(item.name)
+    if (!isPartnerLogo(item) || !companyName || names.has(companyName.toLowerCase())) return []
+    const partner: ManufacturerSubmission = {
+      _id: item._id,
+      companyName,
+      contactName: '',
+      email: '',
+      phone: '',
+      website: '',
+      productsOfInterest: '',
+      notes: '',
+      brochure: null,
+      logo: item.image,
+      status: 'approved',
+      token: '',
+      adminNote: '',
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    }
+    return [partner]
+  })
+  return [...saved, ...partners]
 }
 
 export async function catalogueAnalytics() {

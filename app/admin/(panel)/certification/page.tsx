@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { AdminCertificationPanel } from '@/components/admin/admin-certification-panel'
 import { accordApiPath } from '@/lib/platform/backend-url'
 import type { CertificationLogo } from '@/lib/platform/content'
+import { isPartnerLogo } from '@/lib/platform/partner-logos'
 
 export default async function AdminCertificationPage() {
   const store = await cookies()
@@ -13,6 +14,6 @@ export default async function AdminCertificationPage() {
     cache: 'no-store',
   }).catch(() => null)
   const payload = response && response.ok ? await response.json().catch(() => null) : null
-  const items = (payload?.data || []) as CertificationLogo[]
+  const items = ((payload?.data || []) as CertificationLogo[]).filter((item) => !isPartnerLogo(item))
   return <AdminCertificationPanel items={items} />
 }

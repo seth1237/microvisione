@@ -1,6 +1,7 @@
 import "server-only";
 
 import { accordApiPath, catalogueApiSelected, publicAssetUrl } from "@/lib/platform/backend-url";
+import { isPartnerLogo } from "@/lib/platform/partner-logos";
 
 export type PublicCertification = {
   id: string;
@@ -16,6 +17,7 @@ export async function liveCertifications(): Promise<PublicCertification[]> {
     if (!response.ok) return [];
     const payload = (await response.json()) as { data?: PublicCertification[] };
     return (payload.data || []).flatMap((item) => {
+      if (isPartnerLogo(item)) return [];
       const imageUrl = publicAssetUrl(item.imageUrl);
       return imageUrl && item.name ? [{ ...item, purpose: item.purpose || "", imageUrl }] : [];
     });
