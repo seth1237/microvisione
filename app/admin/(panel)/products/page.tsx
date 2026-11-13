@@ -12,8 +12,8 @@ export default async function AdminProductsPage() {
   ])
   return (
     <>
-      <AdminCatalogCsv />
       <AdminCatalogCreate categories={catalog.categories} />
+      <AdminCatalogCsv />
       <AdminProductsPanel
         products={catalog.products}
         categories={catalog.categories}

@@ -21,6 +21,7 @@ import {
   createOffer,
   createRedirect,
   deleteCatalogue,
+  deleteManufacturer,
   deleteCompanyProfilePage,
   deleteEvent,
   deleteInstallation,
@@ -1427,7 +1428,6 @@ app.post('/api/admin/manufacturers', async (c) => {
     const companyName = formText(form, 'companyName')
     if (!companyName) return c.json({ success: false, message: 'Enter the manufacturer name' }, 400)
     const logo = await uploadFormImage(form.get('logo'), 'microvision/manufacturers', slugifyName(companyName) || 'logo')
-    if (!logo) return c.json({ success: false, message: 'Choose a logo image' }, 400)
     const item = await createManufacturer({
       companyName,
       contactName: formText(form, 'contactName').slice(0, 120),
@@ -1437,7 +1437,7 @@ app.post('/api/admin/manufacturers', async (c) => {
       productsOfInterest: formText(form, 'productsOfInterest').slice(0, 500),
       notes: formText(form, 'notes').slice(0, 500),
       brochure: null,
-      logo,
+      logo: logo || null,
       status: 'approved',
     })
     return c.json({ success: true, data: item })
@@ -1475,10 +1475,30 @@ app.patch('/api/admin/manufacturers', async (c) => {
   const form = await c.req.formData()
   const id = formText(form, 'id')
   const status = formText(form, 'status')
-  if (!id || !['approved', 'rejected', 'pending'].includes(status)) return c.json({ success: false, message: 'Valid id and status are required' }, 400)
-  const item = await updateManufacturer(id, { status: status as 'approved' | 'rejected' | 'pending', adminNote: formText(form, 'adminNote') })
+  if (!id) return c.json({ success: false, message: 'Manufacturer id is required' }, 400)
+  if (status && !['approved', 'rejected', 'pending'].includes(status)) return c.json({ success: false, message: 'Status is not valid' }, 400)
+  const companyName = formText(form, 'companyName')
+  const item = await updateManufacturer(id, {
+    status: status ? status as 'approved' | 'rejected' | 'pending' : undefined,
+    adminNote: form.has('adminNote') ? formText(form, 'adminNote') : undefined,
+    companyName: companyName ? companyName.slice(0, 160) : undefined,
+    contactName: form.has('contactName') ? formText(form, 'contactName').slice(0, 120) : undefined,
+    email: form.has('email') ? formText(form, 'email').slice(0, 160) : undefined,
+    phone: form.has('phone') ? formText(form, 'phone').slice(0, 40) : undefined,
+    website: form.has('website') ? formText(form, 'website').slice(0, 200) : undefined,
+    productsOfInterest: form.has('productsOfInterest') ? formText(form, 'productsOfInterest').slice(0, 500) : undefined,
+    notes: form.has('notes') ? formText(form, 'notes').slice(0, 500) : undefined,
+  })
   if (!item) return c.json({ success: false, message: 'Submission not found' }, 404)
   return c.json({ success: true, data: item })
+})
+
+app.delete('/api/admin/manufacturers/:id', async (c) => {
+  const auth = requireAdmin(c)
+  if (auth.error) return c.json(auth.error, auth.status)
+  const removed = await deleteManufacturer(c.req.param('id'))
+  if (!removed) return c.json({ success: false, message: 'Manufacturer not found' }, 404)
+  return c.json({ success: true })
 })
 
 app.get('/api/admin/performance', async (c) => {

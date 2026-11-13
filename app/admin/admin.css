@@ -224,7 +224,7 @@
 .admin-mfr-table { display: grid; gap: 6px; overflow-x: auto; }
 .admin-mfr-head, .admin-mfr-row {
   display: grid;
-  grid-template-columns: minmax(160px, .9fr) minmax(180px, 1.4fr) 90px 120px;
+  grid-template-columns: minmax(160px, .9fr) minmax(160px, 1.2fr) 90px 110px auto;
   gap: 16px;
   align-items: center;
   min-width: 640px;
@@ -252,6 +252,7 @@
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
 }
+.admin-mfr-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .admin-mfr-head { padding: 0 14px 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #789096; font-weight: 700; }
 .admin-mfr-row {
   width: 100%;

@@ -894,12 +894,25 @@ export async function createManufacturer(input: Omit<ManufacturerSubmission, '_i
   return serializeManufacturer({ ...doc, _id: result.insertedId } as WithDates<ManufacturerSubmission> & { _id: ObjectId })
 }
 
-export async function updateManufacturer(id: string, input: Partial<Pick<ManufacturerSubmission, 'status' | 'adminNote'>>): Promise<ManufacturerSubmission | null> {
-  if (isMysqlConfigured()) return mysqlUpdateDoc<ManufacturerSubmission>('manufacturer', id, input)
+export async function updateManufacturer(id: string, input: Partial<Pick<ManufacturerSubmission, 'status' | 'adminNote' | 'companyName' | 'contactName' | 'email' | 'phone' | 'website' | 'productsOfInterest' | 'notes' | 'logo'>>): Promise<ManufacturerSubmission | null> {
+  const patch = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
+  if (isMysqlConfigured()) return mysqlUpdateDoc<ManufacturerSubmission>('manufacturer', id, patch)
   if (!ObjectId.isValid(id)) return null
   const collection = await getCollection<WithDates<ManufacturerSubmission>>('manufacturers')
-  await collection.updateOne({ _id: new ObjectId(id) }, { $set: { ...input, updatedAt: new Date() } })
+  await collection.updateOne({ _id: new ObjectId(id) }, { $set: { ...patch, updatedAt: new Date() } })
   return getManufacturerById(id)
+}
+
+export async function deleteManufacturer(id: string): Promise<ManufacturerSubmission | null> {
+  if (isMysqlConfigured()) {
+    const existing = await mysqlDeleteDoc<ManufacturerSubmission>('manufacturer', id)
+    if (existing?.logo?.publicId?.startsWith('mysql:')) await mysqlDeleteFile(existing.logo.publicId).catch(() => undefined)
+    return existing
+  }
+  const existing = await getManufacturerById(id)
+  if (!existing || !ObjectId.isValid(id)) return null
+  await (await getCollection('manufacturers')).deleteOne({ _id: new ObjectId(id) })
+  return existing
 }
 
 export async function listRedirects(): Promise<RedirectRule[]> {

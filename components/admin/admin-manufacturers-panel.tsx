@@ -42,6 +42,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState({ companyName: '', contactName: '', phone: '', email: '', productsOfInterest: '' })
+  const [editor, setEditor] = useState({ companyName: '', contactName: '', phone: '', email: '', website: '', productsOfInterest: '', notes: '' })
   const [logoName, setLogoName] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -64,6 +65,75 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
       return
     }
     setMessage(`Marked ${status}.`)
+    router.refresh()
+  }
+
+  function openEditor(item: ManufacturerSubmission) {
+    if (selectedId === item._id) {
+      setSelectedId(null)
+      return
+    }
+    setSelectedId(item._id)
+    setEditor({
+      companyName: item.companyName,
+      contactName: item.contactName,
+      phone: item.phone,
+      email: item.email,
+      website: item.website,
+      productsOfInterest: item.productsOfInterest,
+      notes: item.notes,
+    })
+  }
+
+  async function saveDetails(item: ManufacturerSubmission) {
+    if (!editor.companyName.trim()) {
+      setMessage('Enter the manufacturer name')
+      return
+    }
+    setBusy(true)
+    setMessage('')
+    const data = new FormData()
+    data.set('companyName', editor.companyName.trim())
+    data.set('contactName', editor.contactName)
+    data.set('phone', editor.phone)
+    data.set('email', editor.email)
+    data.set('website', editor.website)
+    data.set('productsOfInterest', editor.productsOfInterest)
+    data.set('notes', editor.notes)
+    data.set('adminNote', note[item._id] ?? item.adminNote)
+    const catalogue = item._id.startsWith('catalogue:')
+    if (!catalogue) {
+      data.set('id', item._id)
+      data.set('status', item.status)
+    }
+    const response = await fetch('/api/admin/manufacturers', { method: catalogue ? 'POST' : 'PATCH', body: data })
+    const payload = await response.json().catch(() => ({}))
+    setBusy(false)
+    if (!response.ok) {
+      setMessage(payload.message || 'Could not save the manufacturer')
+      return
+    }
+    setMessage(`Saved ${editor.companyName.trim()}.`)
+    router.refresh()
+  }
+
+  async function removeManufacturer(item: ManufacturerSubmission) {
+    if (item._id.startsWith('catalogue:')) {
+      setMessage(`${item.companyName} is listed from the product catalogue. Change the product brand to remove that name.`)
+      return
+    }
+    if (!window.confirm(`Delete ${item.companyName}?`)) return
+    setBusy(true)
+    setMessage('')
+    const response = await fetch(`/api/admin/manufacturers/${encodeURIComponent(item._id)}`, { method: 'DELETE' })
+    const payload = await response.json().catch(() => ({}))
+    setBusy(false)
+    if (!response.ok) {
+      setMessage(payload.message || 'Could not delete the manufacturer')
+      return
+    }
+    setSelectedId(null)
+    setMessage(`Deleted ${item.companyName}.`)
     router.refresh()
   }
 
@@ -178,6 +248,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
               <span>Products supplied</span>
               <span>Status</span>
               <span>Logo</span>
+              <span>Actions</span>
             </div>
             {filtered.map((item) => (
               <div
@@ -187,7 +258,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
                 <button
                   type="button"
                   className="admin-mfr-name"
-                  onClick={() => setSelectedId((current) => current === item._id ? null : item._id)}
+                  onClick={() => openEditor(item)}
                 >
                   {item.logo?.secureUrl ? <img src={item.logo.secureUrl} alt="" className="h-8 w-8 object-contain" /> : null}
                   <b>{item.companyName}</b>
@@ -211,6 +282,10 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
                     />
                   </label>
                 )}
+                <span className="admin-mfr-actions">
+                  <button type="button" className="button button-outline button-compact" onClick={() => openEditor(item)}>Edit</button>
+                  <button type="button" className="button button-outline button-compact" disabled={busy} onClick={() => void removeManufacturer(item)}>Delete</button>
+                </span>
               </div>
             ))}
           </div>
@@ -226,23 +301,44 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
             </div>
             <button type="button" className="button button-outline button-compact" onClick={() => setSelectedId(null)}>Close</button>
           </div>
+          <div className="admin-editor">
+            <label>
+              Manufacturer
+              <input value={editor.companyName} onChange={(event) => setEditor({ ...editor, companyName: event.target.value })} required />
+            </label>
+            <label>
+              Contact
+              <input value={editor.contactName} onChange={(event) => setEditor({ ...editor, contactName: event.target.value })} />
+            </label>
+            <label>
+              Phone
+              <input value={editor.phone} onChange={(event) => setEditor({ ...editor, phone: event.target.value })} />
+            </label>
+            <label>
+              Email
+              <input value={editor.email} onChange={(event) => setEditor({ ...editor, email: event.target.value })} />
+            </label>
+            <label>
+              Website
+              <input value={editor.website} onChange={(event) => setEditor({ ...editor, website: event.target.value })} />
+            </label>
+            <label>
+              Products supplied
+              <input value={editor.productsOfInterest} onChange={(event) => setEditor({ ...editor, productsOfInterest: event.target.value })} />
+            </label>
+            <label>
+              Notes
+              <textarea rows={3} value={editor.notes} onChange={(event) => setEditor({ ...editor, notes: event.target.value })} />
+            </label>
+          </div>
+          <div className="admin-job-actions">
+            <button type="button" className="button button-primary button-compact" disabled={busy} onClick={() => void saveDetails(selected)}>Save changes</button>
+            <button type="button" className="button button-outline button-compact" disabled={busy} onClick={() => void removeManufacturer(selected)}>Delete</button>
+          </div>
           <dl className="admin-submission-grid">
-            <Detail label="Company">{selected.companyName}</Detail>
-            <Detail label="Contact">{selected.contactName}</Detail>
-            <Detail label="Email">
-              {selected.email ? <a className="text-link" href={`mailto:${selected.email}`}>{selected.email}</a> : '—'}
-            </Detail>
-            <Detail label="Phone">
-              {selected.phone ? <a className="text-link" href={`tel:${selected.phone}`}>{selected.phone}</a> : '—'}
-            </Detail>
-            <Detail label="Website">
-              {selected.website ? <a className="text-link" href={selected.website} target="_blank" rel="noopener noreferrer">{selected.website}</a> : '—'}
-            </Detail>
-            <Detail label="Status">{selected.status}</Detail>
+            <Detail label="Status">{selected._id.startsWith('catalogue:') ? 'Listed from the catalogue' : selected.status}</Detail>
             <Detail label="Submitted">{formatWhen(selected.createdAt)}</Detail>
             <Detail label="Reference token"><code>{selected.token || '—'}</code></Detail>
-            <Detail label="Products supplied" wide>{selected.productsOfInterest || '—'}</Detail>
-            <Detail label="Notes" wide>{selected.notes || '—'}</Detail>
             <Detail label="Logo" wide>
               {selected.logo?.secureUrl ? <img src={selected.logo.secureUrl} alt="" className="h-16 w-16 object-contain" /> : '—'}
             </Detail>
