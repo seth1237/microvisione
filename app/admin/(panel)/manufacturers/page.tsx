@@ -3,17 +3,14 @@ export const instant = false
 import { AdminManufacturersPanel } from '@/components/admin/admin-manufacturers-panel'
 import { getBrands } from '@/lib/api/products'
 import type { ManufacturerSubmission } from '@/lib/platform/content'
-import { listManufacturers } from '@/lib/platform/site-data'
+import { manufacturerKey } from '@/lib/platform/partner-logos'
+import { hiddenAdminManufacturerKeys, listManufacturers } from '@/lib/platform/site-data'
 
-function matchKey(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
-}
-
-function withCatalogueBrands(items: ManufacturerSubmission[], brands: Awaited<ReturnType<typeof getBrands>>) {
-  const names = new Set(items.map((item) => matchKey(item.companyName)))
+function withCatalogueBrands(items: ManufacturerSubmission[], brands: Awaited<ReturnType<typeof getBrands>>, hidden: Set<string>) {
+  const names = new Set(items.map((item) => manufacturerKey(item.companyName)))
   const catalogue = brands.flatMap((brand) => {
     const companyName = brand.name.trim()
-    if (!companyName || /tbc/i.test(companyName) || names.has(matchKey(companyName))) return []
+    if (!companyName || /tbc/i.test(companyName) || hidden.has(manufacturerKey(companyName)) || names.has(manufacturerKey(companyName))) return []
     const row: ManufacturerSubmission = {
       _id: `catalogue:${brand.id}`,
       companyName,
@@ -37,9 +34,10 @@ function withCatalogueBrands(items: ManufacturerSubmission[], brands: Awaited<Re
 }
 
 export default async function AdminManufacturersPage() {
-  const [items, brands] = await Promise.all([
+  const [items, brands, hidden] = await Promise.all([
     listManufacturers().catch(() => []),
     getBrands().catch(() => []),
+    hiddenAdminManufacturerKeys().catch(() => new Set<string>()),
   ])
-  return <AdminManufacturersPanel items={withCatalogueBrands(items, brands)} />
+  return <AdminManufacturersPanel items={withCatalogueBrands(items, brands, hidden)} />
 }

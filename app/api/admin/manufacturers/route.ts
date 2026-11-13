@@ -1,3 +1,4 @@
+import { clearHiddenManufacturer } from "@/lib/api/hidden-manufacturers"
 import { accordApiPath } from "@/lib/platform/backend-url"
 import { PARTNER_LOGO_PURPOSE, isPartnerLogo, partnerStorageName } from "@/lib/platform/partner-logos"
 
@@ -29,15 +30,16 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") || ""
   const bytes = await request.arrayBuffer()
-  const primary = await forward(request, "/api/admin/manufacturers", bytes)
-  if (primary.status !== 404) return passThrough(primary)
-
   const form = await new Request("http://microvision.local/manufacturers", {
     method: "POST",
     headers: { "content-type": contentType },
     body: bytes,
   }).formData()
   const companyName = String(form.get("companyName") || "").trim()
+  const cookie = request.headers.get("cookie") || ""
+  const primary = await forward(request, "/api/admin/manufacturers", bytes)
+  if (primary.ok && companyName) await clearHiddenManufacturer(cookie, companyName)
+  if (primary.status !== 404) return passThrough(primary)
   const logo = form.get("logo")
   if (!companyName) return Response.json({ success: false, message: "Enter the manufacturer name" }, { status: 400 })
   if (!(logo instanceof File) || logo.size === 0) return Response.json({ success: false, message: "Choose a logo image" }, { status: 400 })
@@ -46,12 +48,9 @@ export async function POST(request: Request) {
   fallback.set("name", partnerStorageName(companyName))
   fallback.set("purpose", PARTNER_LOGO_PURPOSE)
   fallback.set("logo", logo, logo.name || "logo")
-  const headers = new Headers()
-  const cookie = request.headers.get("cookie")
-  if (cookie) headers.set("cookie", cookie)
   const saved = await fetch(accordApiPath("/api/admin/certifications"), {
     method: "POST",
-    headers,
+    headers: cookie ? { cookie } : {},
     body: fallback,
     cache: "no-store",
   })
@@ -59,6 +58,7 @@ export async function POST(request: Request) {
   if (!saved.ok) {
     return Response.json({ success: false, message: payload.message || "Could not add the manufacturer" }, { status: saved.status })
   }
+  await clearHiddenManufacturer(cookie, companyName)
   return Response.json({ success: true, data: payload })
 }
 

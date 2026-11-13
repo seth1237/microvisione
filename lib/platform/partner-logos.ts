@@ -16,3 +16,19 @@ export function isPartnerLogo(record: { purpose?: string | null; name?: string |
   if (typeof record === "string") return record === PARTNER_LOGO_PURPOSE || record.startsWith(MARK)
   return record.purpose === PARTNER_LOGO_PURPOSE || (record.name || "").startsWith(MARK)
 }
+
+const HIDDEN = "deleted:"
+
+export function manufacturerKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
+export function hiddenManufacturerStorageName(name: string) {
+  return `${MARK}${HIDDEN}${name.trim()}`
+}
+
+export function hiddenManufacturerDisplayName(stored?: string | null) {
+  if (!stored) return ""
+  const display = partnerDisplayName(stored)
+  return display.toLowerCase().startsWith(HIDDEN) ? display.slice(HIDDEN.length).trim() : ""
+}

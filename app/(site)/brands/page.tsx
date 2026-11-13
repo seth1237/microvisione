@@ -1,7 +1,8 @@
 import { BrandGrid, type BrandCard } from "@/components/brands/brand-grid";
 import { PageIntro } from "@/components/ui/page-intro";
-import { liveManufacturers } from "@/lib/api/site-media";
+import { hiddenManufacturerKeys, liveManufacturers } from "@/lib/api/site-media";
 import { getBrands } from "@/lib/api/products";
+import { manufacturerKey } from "@/lib/platform/partner-logos";
 
 export const instant = false;
 
@@ -11,17 +12,18 @@ export const metadata = {
 };
 
 function matchKey(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return manufacturerKey(value);
 }
 
 export default async function BrandsPage() {
-  const [brands, manufacturers] = await Promise.all([
+  const [brands, manufacturers, hidden] = await Promise.all([
     getBrands(),
     liveManufacturers().catch(() => []),
+    hiddenManufacturerKeys().catch(() => new Set<string>()),
   ]);
   const logos = new Map(manufacturers.map((item) => [matchKey(item.name), item.logoUrl]));
   const cards: BrandCard[] = brands
-    .filter((brand) => brand.name && !/tbc/i.test(brand.name))
+    .filter((brand) => brand.name && !/tbc/i.test(brand.name) && !hidden.has(matchKey(brand.name)))
     .map((brand) => ({
       id: brand.id,
       slug: brand.slug,
@@ -30,7 +32,7 @@ export default async function BrandsPage() {
       logoUrl: logos.get(matchKey(brand.name)),
     }));
   for (const maker of manufacturers) {
-    if (cards.some((card) => matchKey(card.name) === matchKey(maker.name))) continue;
+    if (hidden.has(matchKey(maker.name)) || cards.some((card) => matchKey(card.name) === matchKey(maker.name))) continue;
     cards.push({
       id: maker.id,
       slug: matchKey(maker.name),

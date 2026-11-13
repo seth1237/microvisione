@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { accordApiPath } from '@/lib/platform/backend-url'
 import type { Catalog, CatalogProduct } from '@/lib/platform/catalog'
 import type { Catalogue, CertificationLogo, CompanyProfilePage, EventPost, Installation, ManufacturerSubmission, Offer, RedirectRule } from '@/lib/platform/content'
-import { isPartnerLogo, partnerDisplayName } from '@/lib/platform/partner-logos'
+import { hiddenManufacturerDisplayName, isPartnerLogo, partnerDisplayName } from '@/lib/platform/partner-logos'
 import type { JobApplication, JobPost } from '@/lib/platform/jobs'
 import { emptySearchReport, parsePeriod as parseSearchPeriod, parseSearchKind, type SearchKind } from '@/lib/platform/search-analytics'
 import { emptyVisitorReport, parsePeriod, type VisitorPeriod } from '@/lib/platform/visitor-report'
@@ -196,6 +196,14 @@ export async function listRedirects(): Promise<RedirectRule[]> {
   return payload?.data || []
 }
 
+export async function hiddenAdminManufacturerKeys() {
+  const certificates = await backendJson<{ data: CertificationLogo[] }>('/api/admin/certifications')
+  return new Set((certificates?.data || []).flatMap((item) => {
+    const name = hiddenManufacturerDisplayName(item.name)
+    return name ? [name.toLowerCase().replace(/[^a-z0-9]+/g, '')] : []
+  }))
+}
+
 export async function listManufacturers() {
   const [payload, certificates] = await Promise.all([
     backendJson<{ data: ManufacturerSubmission[] }>('/api/admin/manufacturers'),
@@ -203,9 +211,13 @@ export async function listManufacturers() {
   ])
   const saved = payload?.data || []
   const partnerKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const hidden = new Set((certificates?.data || []).flatMap((item) => {
+    const name = hiddenManufacturerDisplayName(item.name)
+    return name ? [partnerKey(name)] : []
+  }))
   const partners = (certificates?.data || []).flatMap((item) => {
     const companyName = partnerDisplayName(item.name)
-    if (!isPartnerLogo(item) || !companyName || !item.image?.secureUrl) return []
+    if (hiddenManufacturerDisplayName(item.name) || !isPartnerLogo(item) || !companyName || !item.image?.secureUrl) return []
     const partner: ManufacturerSubmission = {
       _id: item._id,
       companyName,
@@ -225,13 +237,14 @@ export async function listManufacturers() {
     }
     return [partner]
   })
-  const withLogos = saved.map((item) => {
-    if (item.logo?.secureUrl) return item
+  const withLogos = saved.flatMap((item) => {
+    if (hidden.has(partnerKey(item.companyName))) return []
+    if (item.logo?.secureUrl) return [item]
     const logo = partners.find((partner) => partnerKey(partner.companyName) === partnerKey(item.companyName))?.logo
-    return logo ? { ...item, logo } : item
+    return [logo ? { ...item, logo } : item]
   })
   const names = new Set(withLogos.map((item) => partnerKey(item.companyName)))
-  return [...withLogos, ...partners.filter((item) => !names.has(partnerKey(item.companyName)))]
+  return [...withLogos, ...partners.filter((item) => !names.has(partnerKey(item.companyName)) && !hidden.has(partnerKey(item.companyName)))]
 }
 
 export async function catalogueAnalytics() {

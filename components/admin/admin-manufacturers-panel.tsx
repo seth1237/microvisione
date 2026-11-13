@@ -118,14 +118,10 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
   }
 
   async function removeManufacturer(item: ManufacturerSubmission) {
-    if (item._id.startsWith('catalogue:')) {
-      setMessage(`${item.companyName} is listed from the product catalogue. Change the product brand to remove that name.`)
-      return
-    }
-    if (!window.confirm(`Delete ${item.companyName}?`)) return
+    if (!window.confirm(`Delete ${item.companyName}? Products already in the catalogue stay.`)) return
     setBusy(true)
     setMessage('')
-    const response = await fetch(`/api/admin/manufacturers/${encodeURIComponent(item._id)}`, { method: 'DELETE' })
+    const response = await fetch(`/api/admin/manufacturers/${encodeURIComponent(item._id)}?name=${encodeURIComponent(item.companyName)}`, { method: 'DELETE' })
     const payload = await response.json().catch(() => ({}))
     setBusy(false)
     if (!response.ok) {
