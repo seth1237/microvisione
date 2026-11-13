@@ -20,7 +20,7 @@ const emptyCatalog: Catalog = { products: [], categories: [] }
 
 const emptyBootstrap: Bootstrap = {
   catalog: emptyCatalog,
-  showPrices: true,
+  showPrices: false,
   jobCount: 0,
   offer: null,
   headerOffers: [],
@@ -81,7 +81,7 @@ export const getSiteBootstrap = cache(async (): Promise<Bootstrap> => {
   if (!payload) return emptyBootstrap
   return {
     catalog: payload.catalog || emptyCatalog,
-    showPrices: payload.showPrices !== false,
+    showPrices: payload.showPrices === true,
     jobCount: Number(payload.jobCount) || 0,
     offer: payload.offer || null,
     headerOffers: Array.isArray(payload.headerOffers) ? payload.headerOffers : [],

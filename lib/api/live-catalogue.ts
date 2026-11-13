@@ -170,16 +170,8 @@ function toProduct(item: LiveProduct): Product {
 }
 
 export async function liveProductBySlug(slug: string): Promise<Product | null> {
-  if (!catalogueApiSelected()) return null;
-  try {
-    const response = await fetch(accordApiPath("/api/catalog"), { cache: "no-store" });
-    if (!response.ok) return null;
-    const payload = (await response.json()) as { catalog?: { products?: LiveProduct[] } };
-    const item = (payload.catalog?.products || []).find((product) => product.slug === slug);
-    return item ? toProduct(item) : null;
-  } catch {
-    return null;
-  }
+  const catalogue = await liveCatalogue();
+  return catalogue?.products.find((product) => product.slug === slug) ?? null;
 }
 
 export async function liveCatalogue() {

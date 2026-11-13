@@ -4,6 +4,7 @@ import Link from "next/link";
 import { QuantityControl } from "@/components/cart/quantity-control";
 import { PriceTag } from "@/components/product/price-tag";
 import { Button } from "@/components/ui/button";
+import { useCatalogue } from "@/components/providers/catalogue-provider";
 import { cartTotal, useCartStore } from "@/store/cart";
 import { formatKes } from "@/lib/utils/format";
 
@@ -11,8 +12,9 @@ export function CartView() {
   const items = useCartStore((state) => state.items);
   const setQuantity = useCartStore((state) => state.setQuantity);
   const remove = useCartStore((state) => state.remove);
+  const { showPrices } = useCatalogue();
   const total = cartTotal(items);
-  const example = items.some((item) => item.priceIsPlaceholder);
+  const example = showPrices && items.some((item) => item.priceIsPlaceholder);
 
   if (items.length === 0) {
     return (
@@ -32,7 +34,7 @@ export function CartView() {
             <div>
               <Link href={`/product/${item.slug}`} className="font-semibold hover:text-brand">{item.name}</Link>
               <div className="mt-1">
-                <PriceTag price={item.unitPrice} placeholder={item.priceIsPlaceholder} />
+                <PriceTag price={showPrices ? item.unitPrice : undefined} placeholder={showPrices && item.priceIsPlaceholder} />
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -46,7 +48,7 @@ export function CartView() {
         <h2 className="text-lg">Summary</h2>
         <p className="mt-3 flex justify-between text-sm">
           <span>Total</span>
-          <span className="font-semibold">{formatKes(total)}</span>
+          <span className="font-semibold">{showPrices ? formatKes(total) : "Quote"}</span>
         </p>
         {example ? <p className="mt-2 text-xs text-warning">Includes example prices. This is not an invoice.</p> : null}
         <Button asChild className="mt-4 w-full">

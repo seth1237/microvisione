@@ -142,8 +142,12 @@ function allowedCorsOrigin(origin: string) {
   const normalized = origin.replace(/\/$/, '')
   if (CORS_ORIGINS.has(normalized)) return origin
   try {
-    const { hostname } = new URL(origin)
+    const { hostname, protocol } = new URL(origin)
+    if (protocol !== 'https:' && protocol !== 'http:') return ''
     if (hostname === 'localhost' || hostname === '127.0.0.1') return origin
+    if (hostname === 'microvisione.com' || hostname === 'www.microvisione.com') return origin
+    if (hostname === 'microvision.codewithseth.co.ke') return origin
+    if (hostname === 'microvisione-one.vercel.app' || hostname === 'microvisione-nae5.vercel.app') return origin
   } catch {}
   return ''
 }
@@ -154,8 +158,9 @@ app.use('*', bodyLimit({ maxSize: 50 * 1024 * 1024 }))
 app.use('*', cors({
   origin: (origin) => allowedCorsOrigin(origin || ''),
   credentials: true,
-  allowHeaders: ['Content-Type', 'Cookie', 'x-import-key'],
-  allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Cookie', 'Authorization', 'Accept', 'X-Requested-With', 'x-import-key'],
+  allowMethods: ['GET', 'HEAD', 'PUT', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  maxAge: 86400,
 }))
 
 app.onError((error, c) => {

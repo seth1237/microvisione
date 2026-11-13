@@ -13,6 +13,7 @@ import { CategorySidebar } from "@/components/home/home-catalogue";
 import { liveCatalogues, liveProductBySlug } from "@/lib/api/live-catalogue";
 import { catalogueDownloadHref } from "@/lib/platform/content";
 import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
+import { getPriceVisibility } from "@/lib/platform/site-data";
 import { keywordList, metaText } from "@/lib/seo";
 import { absoluteUrl, site } from "@/lib/site";
 import type { Metadata } from "next";
@@ -76,12 +77,13 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
   const { slug } = await params;
   const product = await loadProduct(slug);
   if (!product) notFound();
-  const [brands, categories, catalogue, related, catalogues] = await Promise.all([
+  const [brands, categories, catalogue, related, catalogues, showPrices] = await Promise.all([
     getBrands(),
     getCategories(),
     getProducts(),
     getRelatedProducts(product),
     liveCatalogues(),
+    getPriceVisibility(),
   ]);
   const brand = brands.find((item) => item.id === product.brandId);
   const category = categories.find((item) => item.id === product.categoryId || item.slug === product.categoryId);
@@ -114,7 +116,7 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           image: product.photoUrl ? [absoluteUrl(product.photoUrl)] : undefined,
           ...(maker ? { brand: { "@type": "Brand", name: maker } } : {}),
           url,
-          offers: product.price
+          offers: showPrices && product.price
             ? {
                 "@type": "Offer",
                 priceCurrency: "KES",

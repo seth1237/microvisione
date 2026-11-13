@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCatalogue } from "@/components/providers/catalogue-provider";
 import { Button } from "@/components/ui/button";
 import { cartTotal, useCartStore } from "@/store/cart";
 import { formatKes } from "@/lib/utils/format";
@@ -33,6 +34,7 @@ const control = "mt-1 h-11 w-full rounded-md border border-line bg-surface px-3 
 
 export function CheckoutWizard() {
   const router = useRouter();
+  const { showPrices } = useCatalogue();
   const items = useCartStore((state) => state.items);
   const clear = useCartStore((state) => state.clear);
   const setLastOrder = useCartStore((state) => state.setLastOrder);
@@ -62,7 +64,7 @@ export function CheckoutWizard() {
   }
 
   const total = cartTotal(items);
-  const example = items.some((item) => item.priceIsPlaceholder);
+  const example = showPrices && items.some((item) => item.priceIsPlaceholder);
 
   function validateDetails() {
     const next: Record<string, string> = {};
@@ -270,11 +272,11 @@ export function CheckoutWizard() {
               {items.map((item) => (
                 <li key={item.productId} className="flex justify-between gap-3">
                   <span>{item.name} × {item.quantity}</span>
-                  <span>{item.unitPrice != null ? formatKes(item.unitPrice * item.quantity) : "Quote"}</span>
+                  <span>{showPrices && item.unitPrice != null ? formatKes(item.unitPrice * item.quantity) : "Quote"}</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-3 flex justify-between font-semibold"><span>Total</span><span>{formatKes(total)}</span></p>
+            <p className="mt-3 flex justify-between font-semibold"><span>Total</span><span>{showPrices ? formatKes(total) : "Quote"}</span></p>
             {example ? <p className="mt-2 text-xs text-warning">Some prices are still examples. M-Pesa is only sent for products that are open for checkout.</p> : null}
             <p className="mt-2 text-muted">Payment: {method === "invoice" ? "Invoice request. No payment taken." : `M-Pesa ${receipt ?? ""}`}</p>
           </div>

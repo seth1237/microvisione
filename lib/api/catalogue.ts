@@ -9,11 +9,11 @@ import type { CatalogueBundle } from "@/types";
 async function readShowPrices() {
   try {
     const response = await fetch(accordApiPath("/api/settings/prices"));
-    if (!response.ok) return true;
+    if (!response.ok) return false;
     const payload = (await response.json()) as { showPrices?: boolean };
     return payload.showPrices !== false;
   } catch {
-    return true;
+    return false;
   }
 }
 
