@@ -1,3 +1,4 @@
+import { deleteManufacturerRecord } from "@/lib/api/delete-manufacturer"
 import { clearHiddenManufacturer } from "@/lib/api/hidden-manufacturers"
 import { accordApiPath } from "@/lib/platform/backend-url"
 import { PARTNER_LOGO_PURPOSE, isPartnerLogo, partnerStorageName } from "@/lib/platform/partner-logos"
@@ -25,6 +26,11 @@ async function forward(request: Request, path: string, body?: ArrayBuffer) {
 
 export async function GET(request: Request) {
   return passThrough(await forward(request, "/api/admin/manufacturers"))
+}
+
+export async function DELETE(request: Request) {
+  const id = new URL(request.url).searchParams.get("id")?.trim() || ""
+  return deleteManufacturerRecord(request, id)
 }
 
 export async function POST(request: Request) {

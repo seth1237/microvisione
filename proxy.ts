@@ -30,6 +30,26 @@ const LIVE_PREFIXES = [
   "/q",
 ];
 
+function manufacturerDeleteId(pathname: string, method: string) {
+  if (method !== "DELETE") return "";
+  const prefix = "/api/admin/manufacturers/";
+  if (!pathname.startsWith(prefix)) return "";
+  const id = pathname.slice(prefix.length);
+  if (!id || id.includes("/")) return "";
+  try {
+    return decodeURIComponent(id);
+  } catch {
+    return id;
+  }
+}
+
+function manufacturerDeleteUrl(request: NextRequest, id: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = "/api/admin/manufacturers";
+  url.searchParams.set("id", id);
+  return url;
+}
+
 function isLive(pathname: string) {
   if (pathname === "/") return true;
   return LIVE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -110,7 +130,10 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next({ request: { headers } });
+  const manufacturerId = manufacturerDeleteId(pathname, request.method);
+  const response = manufacturerId
+    ? NextResponse.rewrite(manufacturerDeleteUrl(request, manufacturerId), { request: { headers } })
+    : NextResponse.next({ request: { headers } });
   if (pathname.startsWith("/api") && siteOrigin) {
     for (const [key, value] of Object.entries(corsHeaders(siteOrigin))) response.headers.set(key, value);
   }

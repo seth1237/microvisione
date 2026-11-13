@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ManufacturerSubmission } from '@/lib/platform/content'
 
+function catalogueRow(id: string) {
+  return id.startsWith('catalogue:') || id.startsWith('catalogue-')
+}
+
 function formatWhen(value: string) {
   if (!value) return '—'
   const date = new Date(value)
@@ -101,7 +105,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
     data.set('productsOfInterest', editor.productsOfInterest)
     data.set('notes', editor.notes)
     data.set('adminNote', note[item._id] ?? item.adminNote)
-    const catalogue = item._id.startsWith('catalogue:')
+    const catalogue = catalogueRow(item._id)
     if (!catalogue) {
       data.set('id', item._id)
       data.set('status', item.status)
@@ -121,7 +125,9 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
     if (!window.confirm(`Delete ${item.companyName}? Products already in the catalogue stay.`)) return
     setBusy(true)
     setMessage('')
-    const response = await fetch(`/api/admin/manufacturers/${encodeURIComponent(item._id)}?name=${encodeURIComponent(item.companyName)}`, { method: 'DELETE' })
+    const params = new URLSearchParams({ name: item.companyName })
+    if (!catalogueRow(item._id)) params.set('id', item._id)
+    const response = await fetch(`/api/admin/manufacturers?${params}`, { method: 'DELETE' })
     const payload = await response.json().catch(() => ({}))
     setBusy(false)
     if (!response.ok) {
@@ -139,7 +145,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
     const data = new FormData()
     data.set('companyName', item.companyName)
     data.set('logo', file)
-    const catalogueName = item._id.startsWith('catalogue:')
+    const catalogueName = catalogueRow(item._id)
     const response = await fetch(
       catalogueName ? '/api/admin/manufacturers' : `/api/admin/manufacturers/${encodeURIComponent(item._id)}/logo`,
       { method: 'POST', body: data },
@@ -260,7 +266,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
                   <b>{item.companyName}</b>
                 </button>
                 <span className="admin-mfr-products">{item.productsOfInterest || 'No products listed'}</span>
-                <span className="admin-mfr-status">{item._id.startsWith('catalogue:') ? 'No logo' : item.status}</span>
+                <span className="admin-mfr-status">{catalogueRow(item._id) ? 'No logo' : item.status}</span>
                 {item.logo?.secureUrl ? (
                   <span className="admin-mfr-status">Added</span>
                 ) : (
@@ -332,7 +338,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
             <button type="button" className="button button-outline button-compact" disabled={busy} onClick={() => void removeManufacturer(selected)}>Delete</button>
           </div>
           <dl className="admin-submission-grid">
-            <Detail label="Status">{selected._id.startsWith('catalogue:') ? 'Listed from the catalogue' : selected.status}</Detail>
+            <Detail label="Status">{catalogueRow(selected._id) ? 'Listed from the catalogue' : selected.status}</Detail>
             <Detail label="Submitted">{formatWhen(selected.createdAt)}</Detail>
             <Detail label="Reference token"><code>{selected.token || '—'}</code></Detail>
             <Detail label="Logo" wide>
@@ -367,7 +373,7 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
             </label>
             <button className="button button-outline button-compact" disabled={busy} type="submit">Save logo</button>
           </form>
-          {selected._id.startsWith('catalogue:') ? null : (
+          {catalogueRow(selected._id) ? null : (
             <div className="admin-job-actions">
               <button type="button" className="button button-primary button-compact" onClick={() => setStatus(selected._id, 'approved')}>Approve</button>
               <button type="button" className="button button-outline button-compact" onClick={() => setStatus(selected._id, 'rejected')}>Reject</button>

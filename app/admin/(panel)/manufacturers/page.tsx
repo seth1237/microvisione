@@ -12,7 +12,7 @@ function withCatalogueBrands(items: ManufacturerSubmission[], brands: Awaited<Re
     const companyName = brand.name.trim()
     if (!companyName || /tbc/i.test(companyName) || hidden.has(manufacturerKey(companyName)) || names.has(manufacturerKey(companyName))) return []
     const row: ManufacturerSubmission = {
-      _id: `catalogue:${brand.id}`,
+      _id: `catalogue-${brand.id}`,
       companyName,
       contactName: '',
       email: '',

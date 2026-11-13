@@ -14,8 +14,8 @@ async function adminCertifications(cookie: string) {
   const response = await fetch(accordApiPath("/api/admin/certifications"), {
     headers: cookie ? { cookie } : {},
     cache: "no-store",
-  })
-  if (!response.ok) return []
+  }).catch(() => null)
+  if (!response?.ok) return []
   const payload = await response.json().catch(() => ({})) as { data?: CertificationRecord[] }
   return payload.data || []
 }
@@ -37,7 +37,8 @@ export async function rememberHiddenManufacturer(cookie: string, name: string) {
     headers: cookie ? { cookie } : {},
     body,
     cache: "no-store",
-  })
+  }).catch(() => null)
+  if (!response) return { ok: false, status: 503, message: "Could not reach the catalogue API" }
   const payload = await response.json().catch(() => ({})) as { message?: string }
   return { ok: response.ok, status: response.status, message: payload.message || "" }
 }
