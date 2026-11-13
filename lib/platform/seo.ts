@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { categoryHref, productCategoryHref, productHref, type CatalogProduct } from '@/lib/platform/catalog'
-import { socialProfileUrls, TWITTER_HANDLE } from '@/lib/platform/socials'
+import { socialProfileUrls } from '@/lib/platform/socials'
 import { COMPANY } from '@/lib/platform/utils'
 
 export const DEFAULT_TITLE = 'Accord Medical Supplies Ltd | Medical Equipment Supplier in Kenya'
@@ -66,8 +66,6 @@ export function pageMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      site: `@${TWITTER_HANDLE}`,
-      creator: `@${TWITTER_HANDLE}`,
       title,
       description: desc,
       images: [ogImage],

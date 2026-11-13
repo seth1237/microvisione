@@ -12,11 +12,8 @@ import type { CategoryWithCount, Product } from "@/types";
 const PAGE_SIZE = 12;
 
 export function HomeCatalogue({
-  categories,
   products,
   initialCategoryId = null,
-  activeSlug = "",
-  categoryLinks = false,
 }: {
   categories: CategoryWithCount[];
   products: Product[];
@@ -24,7 +21,6 @@ export function HomeCatalogue({
   activeSlug?: string;
   categoryLinks?: boolean;
 }) {
-  const router = useRouter();
   const [categoryId, setCategoryId] = useState<string | null>(initialCategoryId);
   const [visible, setVisible] = useState(PAGE_SIZE);
 
@@ -40,32 +36,10 @@ export function HomeCatalogue({
   const shown = filtered.slice(0, visible);
   const remaining = filtered.length - shown.length;
 
-  function selectCategory(id: string | null) {
-    if (categoryLinks) {
-      if (!id) {
-        router.push("/");
-        return;
-      }
-      const category = categories.find((item) => item.id === id);
-      if (category) router.push(`/category/${category.slug}`);
-      return;
-    }
-    setCategoryId(id);
-    setVisible(PAGE_SIZE);
-  }
-
   return (
-    <div className="mt-4 grid items-start gap-4 lg:mt-6 lg:grid-cols-[16.5rem_minmax(0,1fr)] lg:gap-6">
-      <CategorySidebar
-        categories={categories}
-        products={products}
-        activeId={categoryId}
-        activeSlug={activeSlug}
-        onSelect={selectCategory}
-        className="sticky top-36 hidden lg:block"
-      />
+    <div className="mt-4">
       <div className="min-w-0">
-        <ul className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
+        <ul className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5 2xl:grid-cols-6">
           {shown.map((product, index) => (
             <li key={product.id} className="min-w-0">
               <ProductCard product={product} index={index} />

@@ -31,11 +31,9 @@ export default async function HomePage() {
     <>
       <section id="products" className="bg-[#F8FAFC] py-4 sm:py-8" aria-labelledby="products-heading">
         <div className="mx-auto w-full max-w-[1600px] px-3 sm:px-6 lg:px-8">
-          <Reveal>
-            <h1 id="products-heading" className="text-xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
-              Products
-            </h1>
-          </Reveal>
+          <h1 id="products-heading" className="text-xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
+            Products
+          </h1>
           <HomeCatalogue categories={categories} products={catalogue} />
         </div>
       </section>

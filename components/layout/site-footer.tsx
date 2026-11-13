@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SOCIAL_LINKS, type SocialId } from "@/lib/platform/socials";
 import { site } from "@/lib/site";
 import type { CategoryWithCount } from "@/types";
 
@@ -75,7 +76,20 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
             <li><Link href="/legal/terms" className="hover:underline">Terms</Link></li>
             <li><Link href="/legal/privacy" className="hover:underline">Privacy</Link></li>
           </ul>
-          <p className="mt-4 text-xs text-on-dark/70">Social profiles are not linked until the official accounts are confirmed.</p>
+          <nav aria-label="Social media" className="mt-5 flex items-center gap-2">
+            {SOCIAL_LINKS.map((item) => (
+              <a
+                key={item.id}
+                href={item.href}
+                aria-label={item.label}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-on-dark/25 text-on-dark transition hover:border-on-dark hover:bg-on-dark hover:text-black"
+              >
+                <SocialIcon id={item.id} />
+              </a>
+            ))}
+          </nav>
         </div>
       </div>
       <div className="border-t border-on-dark/15">
@@ -90,5 +104,37 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
         </div>
       </div>
     </footer>
+  );
+}
+
+function SocialIcon({ id }: { id: SocialId }) {
+  const common = { viewBox: "0 0 24 24", className: "h-[18px] w-[18px]", "aria-hidden": true as const };
+  if (id === "instagram") {
+    return (
+      <svg {...common} fill="none" stroke="currentColor" strokeWidth="1.75">
+        <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+        <circle cx="12" cy="12" r="3.75" />
+        <circle cx="17.2" cy="6.8" r="0.9" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  if (id === "facebook") {
+    return (
+      <svg {...common} fill="currentColor">
+        <path d="M14.2 8.5h2.3V5.8h-2.3c-2.1 0-3.7 1.7-3.7 3.8v1.7H8.2v2.7h2.3V20h2.8v-6h2.4l.4-2.7h-2.8V9.6c0-.6.4-1.1 1.1-1.1z" />
+      </svg>
+    );
+  }
+  if (id === "linkedin") {
+    return (
+      <svg {...common} fill="currentColor">
+        <path d="M6.2 9.2H3.8V19h2.4V9.2zM5 4.8a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM20.2 13.2c0-2.5-1.3-4.1-3.6-4.1-1.4 0-2.2.7-2.7 1.5V9.2H11.5V19h2.4v-5.4c0-.4 0-.7.1-1 .3-.7.9-1.4 1.9-1.4 1.3 0 1.9 1 1.9 2.4V19h2.4v-5.8z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common} fill="currentColor">
+      <path d="M14.2 4.2c.5 1.5 1.6 2.6 3.1 3.1v2.4a6.2 6.2 0 0 1-3.1-1v5.6a5.1 5.1 0 1 1-5.1-5.1c.3 0 .6 0 .9.1v2.5a2.6 2.6 0 1 0 1.8 2.5V4.2h2.4z" />
+    </svg>
   );
 }

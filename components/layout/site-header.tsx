@@ -36,6 +36,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   const { categories } = useCatalogue();
   const [companyOpen, setCompanyOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [compact, setCompact] = useState(false);
   const [phoneSearchHidden, setPhoneSearchHidden] = useState(false);
   const [clipNav, setClipNav] = useState(false);
@@ -46,6 +47,7 @@ export function SiteHeader() {
   if (pathname !== menuPath) {
     setMenuPath(pathname);
     setCompanyOpen(false);
+    setCategoriesOpen(false);
   }
   const items = useCartStore((state) => state.items);
   const wishes = useWishlistStore((state) => state.ids.length);
@@ -54,6 +56,7 @@ export function SiteHeader() {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setCompanyOpen(false);
+        setCategoriesOpen(false);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -86,6 +89,7 @@ export function SiteHeader() {
       hold = performance.now() + 320;
       if (next) {
         setCompanyOpen(false);
+        setCategoriesOpen(false);
         setClipNav(true);
       }
     };
@@ -133,9 +137,12 @@ export function SiteHeader() {
     let hidden = false;
     let frame = 0;
 
+    let hold = 0;
+
     const show = (next: boolean) => {
       if (hidden === next) return;
       hidden = next;
+      hold = performance.now() + 420;
       setPhoneSearchHidden(next);
     };
 
@@ -148,12 +155,14 @@ export function SiteHeader() {
         lastY = y;
         const search = headerRef.current?.querySelector("[data-phone-search]");
         const typing = Boolean(search && document.activeElement && search.contains(document.activeElement));
-        if (!phone.matches || y < 16 || typing) {
+        if (!phone.matches || typing) return;
+        if (y < 16) {
           show(false);
           return;
         }
-        if (delta > 6) show(true);
-        else if (delta < -6) show(false);
+        if (performance.now() < hold || Math.abs(delta) < 8) return;
+        if (delta > 8) show(true);
+        else if (delta < -8) show(false);
       });
     };
 
@@ -194,9 +203,9 @@ export function SiteHeader() {
       </div>
 
       <div className="glass-nav mv-nav-bar border-b border-white/50">
-      <div className="mx-auto flex min-w-0 max-w-7xl items-center gap-2 px-2 py-2 sm:px-6 lg:px-8">
+      <div className="mx-auto grid min-w-0 max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 py-2 sm:px-6 lg:flex lg:px-8">
         <Dialog.Root>
-          <Dialog.Trigger className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-line lg:hidden" aria-label="Open menu">
+          <Dialog.Trigger className="col-start-1 inline-flex h-11 w-11 items-center justify-center justify-self-start rounded-md border border-line lg:col-auto lg:hidden" aria-label="Open menu">
             <Menu className="h-5 w-5" aria-hidden="true" />
           </Dialog.Trigger>
           <Dialog.Portal>
@@ -212,6 +221,13 @@ export function SiteHeader() {
               <nav className="flex-1 overflow-y-auto px-4 py-4" aria-label="Mobile">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Categories</p>
                 <ul className="mt-2 space-y-1">
+                  <li>
+                    <Dialog.Close asChild>
+                      <Link href="/" className="flex items-center justify-between rounded-md px-2 py-2 text-sm font-semibold">
+                        All products
+                      </Link>
+                    </Dialog.Close>
+                  </li>
                   {categories.map((category) => (
                     <li key={category.id}>
                       <Dialog.Close asChild>
@@ -252,7 +268,7 @@ export function SiteHeader() {
           </Dialog.Portal>
         </Dialog.Root>
 
-        <Link href="/" className="h-[47px] w-[200px] shrink-0" aria-label="Microvision home">
+        <Link href="/" className="col-start-2 h-[47px] w-[200px] shrink-0 justify-self-center lg:col-auto lg:justify-self-auto" aria-label="Microvision home">
           <Logo />
         </Link>
 
@@ -262,7 +278,7 @@ export function SiteHeader() {
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-1 sm:gap-2 lg:ml-0 lg:gap-3">
+        <div className="col-start-3 flex items-center justify-self-end gap-1 sm:gap-2 lg:col-auto lg:ml-0 lg:gap-3">
           <Link href="/quote" className="hidden h-11 items-center rounded-md bg-accent px-3 text-sm font-semibold text-on-accent lg:inline-flex">
             Request quote
           </Link>
@@ -291,7 +307,7 @@ export function SiteHeader() {
             <SearchBox
               listId="header-search-list-phone"
               placeholder="Search"
-              inputClassName="rounded-full border-transparent bg-paper pl-10"
+              inputClassName="rounded-full border-2 border-[#1211bb] bg-paper pl-10"
               menuClassName="rounded-2xl shadow-none"
             />
           </div>
@@ -302,6 +318,44 @@ export function SiteHeader() {
         <div className={clipNav ? "overflow-hidden" : undefined}>
           <nav className="border-t border-white/40" aria-label="Primary" aria-hidden={compact}>
             <div className="mx-auto flex max-w-7xl items-center justify-between px-8">
+              <div
+                className="relative"
+                onMouseEnter={() => {
+                  if (compactRef.current) return;
+                  setClipNav(false);
+                  setCompanyOpen(false);
+                  setCategoriesOpen(true);
+                }}
+                onMouseLeave={() => setCategoriesOpen(false)}
+              >
+                <button
+                  type="button"
+                  className={cn("inline-flex h-12 items-center gap-1 px-3 text-sm font-semibold", pathname.startsWith("/category") && "text-brand")}
+                  aria-expanded={categoriesOpen}
+                  tabIndex={compact ? -1 : undefined}
+                  onClick={() => setCategoriesOpen(true)}
+                >
+                  Categories
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                </button>
+                {categoriesOpen ? (
+                  <ul className="absolute top-full left-0 z-40 max-h-96 min-w-64 overflow-auto rounded-md border border-line bg-surface p-2 shadow-pop">
+                    <li>
+                      <Link href="/" className="flex items-center justify-between rounded-md px-3 py-2 text-sm font-semibold hover:bg-paper">
+                        All products
+                      </Link>
+                    </li>
+                    {categories.map((category) => (
+                      <li key={category.id}>
+                        <Link href={`/category/${category.slug}`} className="flex items-center justify-between gap-4 rounded-md px-3 py-2 text-sm font-semibold hover:bg-paper">
+                          <span>{category.name}</span>
+                          <span className="text-xs text-muted">{category.count}</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
               <NavLink href="/brands" current={pathname.startsWith("/brands")}>Brands</NavLink>
               <NavLink href="/services" current={pathname.startsWith("/services")}>Services</NavLink>
               <div
@@ -309,6 +363,7 @@ export function SiteHeader() {
                 onMouseEnter={() => {
                   if (compactRef.current) return;
                   setClipNav(false);
+                  setCategoriesOpen(false);
                   setCompanyOpen(true);
                 }}
                 onMouseLeave={() => setCompanyOpen(false)}

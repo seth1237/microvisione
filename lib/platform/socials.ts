@@ -1,11 +1,8 @@
-export const TWITTER_HANDLE = 'AccordMedKe'
-
 export const SOCIAL_LINKS = [
-  { id: 'facebook', label: 'Facebook', href: 'https://www.facebook.com/AccordMedKe' },
-  { id: 'instagram', label: 'Instagram', href: 'https://www.instagram.com/accordmedicalke/' },
-  { id: 'x', label: 'X', href: 'https://x.com/AccordMedKe' },
-  { id: 'linkedin', label: 'LinkedIn', href: 'https://www.linkedin.com/company/accord-medical-supplies-ltd/' },
-  { id: 'tiktok', label: 'TikTok', href: 'https://www.tiktok.com/@accordmedicalke' },
+  { id: 'instagram', label: 'Instagram', href: 'https://www.instagram.com/_microvisionentltd/' },
+  { id: 'facebook', label: 'Facebook', href: 'https://www.facebook.com/microvisionenterprises' },
+  { id: 'linkedin', label: 'LinkedIn', href: 'https://www.linkedin.com/in/microvision-enterprises-ltd-a7b3263aa' },
+  { id: 'tiktok', label: 'TikTok', href: 'https://www.tiktok.com/@microvisionenterprises?lang=en' },
 ] as const
 
 export type SocialId = (typeof SOCIAL_LINKS)[number]['id']
@@ -19,7 +16,7 @@ export function shareFacebookUrl(url: string) {
 }
 
 export function shareXUrl(url: string, text: string) {
-  return `https://x.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}&via=${TWITTER_HANDLE}`
+  return `https://x.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
 }
 
 export function shareLinkedInUrl(url: string) {
