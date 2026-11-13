@@ -67,6 +67,27 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
     router.refresh()
   }
 
+  async function uploadLogo(item: ManufacturerSubmission, file: File) {
+    setBusy(true)
+    setMessage('')
+    const data = new FormData()
+    data.set('companyName', item.companyName)
+    data.set('logo', file)
+    const catalogueName = item._id.startsWith('catalogue:')
+    const response = await fetch(
+      catalogueName ? '/api/admin/manufacturers' : `/api/admin/manufacturers/${encodeURIComponent(item._id)}/logo`,
+      { method: 'POST', body: data },
+    )
+    const payload = await response.json().catch(() => ({}))
+    setBusy(false)
+    if (!response.ok) {
+      setMessage(payload.message || 'Could not save the logo')
+      return
+    }
+    setMessage(`Logo saved for ${item.companyName}.`)
+    router.refresh()
+  }
+
   async function addManufacturer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const formEl = event.currentTarget
@@ -144,11 +165,11 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
       <div className="admin-card">
         <div className="card-title">
           <div>
-            <h3>Submissions</h3>
-            <span>Click a manufacturer to open the full application.</span>
+            <h3>Manufacturers</h3>
+            <span>The brands page list. Add a logo where one is missing.</span>
           </div>
         </div>
-        {items.length === 0 && <p className="text-muted-foreground">No submissions yet.</p>}
+        {items.length === 0 && <p className="text-muted-foreground">No manufacturers yet.</p>}
         {items.length > 0 && filtered.length === 0 && <p className="text-muted-foreground">No manufacturers match that search.</p>}
         {filtered.length > 0 && (
           <div className="admin-mfr-table">
@@ -156,21 +177,41 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
               <span>Manufacturer</span>
               <span>Products supplied</span>
               <span>Status</span>
+              <span>Logo</span>
             </div>
             {filtered.map((item) => (
-              <button
+              <div
                 key={item._id}
-                type="button"
                 className={`admin-mfr-row${selectedId === item._id ? ' is-open' : ''}`}
-                onClick={() => setSelectedId((current) => current === item._id ? null : item._id)}
               >
-                <b className="inline-flex items-center gap-2">
+                <button
+                  type="button"
+                  className="admin-mfr-name"
+                  onClick={() => setSelectedId((current) => current === item._id ? null : item._id)}
+                >
                   {item.logo?.secureUrl ? <img src={item.logo.secureUrl} alt="" className="h-8 w-8 object-contain" /> : null}
-                  {item.companyName}
-                </b>
+                  <b>{item.companyName}</b>
+                </button>
                 <span className="admin-mfr-products">{item.productsOfInterest || 'No products listed'}</span>
-                <span className="admin-mfr-status">{item.status}</span>
-              </button>
+                <span className="admin-mfr-status">{item._id.startsWith('catalogue:') ? 'No logo' : item.status}</span>
+                {item.logo?.secureUrl ? (
+                  <span className="admin-mfr-status">Added</span>
+                ) : (
+                  <label className="button button-outline button-compact admin-mfr-logo">
+                    Add logo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={busy}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        event.target.value = ''
+                        if (file) void uploadLogo(item, file)
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -216,25 +257,16 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
           </label>
           <form
             className="admin-editor"
-            onSubmit={async (event) => {
+            onSubmit={(event) => {
               event.preventDefault()
               const formEl = event.currentTarget
-              const data = new FormData(formEl)
-              if (!(data.get('logo') instanceof File) || (data.get('logo') as File).size === 0) {
+              const file = new FormData(formEl).get('logo')
+              if (!(file instanceof File) || file.size === 0) {
                 setMessage('Choose a logo image')
                 return
               }
-              setBusy(true)
-              const response = await fetch(`/api/admin/manufacturers/${encodeURIComponent(selected._id)}/logo`, { method: 'POST', body: data })
-              const payload = await response.json().catch(() => ({}))
-              setBusy(false)
-              if (!response.ok) {
-                setMessage(payload.message || 'Could not save the logo')
-                return
-              }
               formEl.reset()
-              setMessage('Logo saved.')
-              router.refresh()
+              void uploadLogo(selected, file)
             }}
           >
             <label>
@@ -243,10 +275,12 @@ export function AdminManufacturersPanel({ items }: { items: ManufacturerSubmissi
             </label>
             <button className="button button-outline button-compact" disabled={busy} type="submit">Save logo</button>
           </form>
-          <div className="admin-job-actions">
-            <button type="button" className="button button-primary button-compact" onClick={() => setStatus(selected._id, 'approved')}>Approve</button>
-            <button type="button" className="button button-outline button-compact" onClick={() => setStatus(selected._id, 'rejected')}>Reject</button>
-          </div>
+          {selected._id.startsWith('catalogue:') ? null : (
+            <div className="admin-job-actions">
+              <button type="button" className="button button-primary button-compact" onClick={() => setStatus(selected._id, 'approved')}>Approve</button>
+              <button type="button" className="button button-outline button-compact" onClick={() => setStatus(selected._id, 'rejected')}>Reject</button>
+            </div>
+          )}
         </article>
       )}
     </>

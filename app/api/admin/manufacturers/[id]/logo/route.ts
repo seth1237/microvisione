@@ -38,12 +38,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   })
   const payload = listed.ok ? await listed.json().catch(() => ({})) as { data?: Array<{ _id?: string; name?: string; purpose?: string }> } : {}
   const existing = (payload.data || []).find((item) => item._id === id && isPartnerLogo(item))
-  if (!existing?.name) {
+  const companyName = String(form.get("companyName") || existing?.name || "").trim()
+  if (!companyName) {
     return Response.json({ success: false, message: "Could not save the logo" }, { status: 404 })
   }
 
   const fallback = new FormData()
-  fallback.set("name", partnerStorageName(existing.name))
+  fallback.set("name", partnerStorageName(companyName))
   fallback.set("purpose", PARTNER_LOGO_PURPOSE)
   fallback.set("logo", logo, logo.name || "logo")
   const saved = await fetch(accordApiPath("/api/admin/certifications"), {
@@ -56,10 +57,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const error = await saved.json().catch(() => ({})) as { message?: string }
     return Response.json({ success: false, message: error.message || "Could not save the logo" }, { status: saved.status })
   }
-  await fetch(accordApiPath(`/api/admin/certifications/${encodeURIComponent(id)}`), {
-    method: "DELETE",
-    headers: cookie ? { cookie } : {},
-    cache: "no-store",
-  }).catch(() => undefined)
+  if (existing) {
+    await fetch(accordApiPath(`/api/admin/certifications/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: cookie ? { cookie } : {},
+      cache: "no-store",
+    }).catch(() => undefined)
+  }
   return Response.json({ success: true })
 }

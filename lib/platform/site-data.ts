@@ -202,10 +202,10 @@ export async function listManufacturers() {
     backendJson<{ data: CertificationLogo[] }>('/api/admin/certifications'),
   ])
   const saved = payload?.data || []
-  const names = new Set(saved.map((item) => item.companyName.toLowerCase()))
+  const partnerKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '')
   const partners = (certificates?.data || []).flatMap((item) => {
     const companyName = partnerDisplayName(item.name)
-    if (!isPartnerLogo(item) || !companyName || names.has(companyName.toLowerCase())) return []
+    if (!isPartnerLogo(item) || !companyName || !item.image?.secureUrl) return []
     const partner: ManufacturerSubmission = {
       _id: item._id,
       companyName,
@@ -225,7 +225,13 @@ export async function listManufacturers() {
     }
     return [partner]
   })
-  return [...saved, ...partners]
+  const withLogos = saved.map((item) => {
+    if (item.logo?.secureUrl) return item
+    const logo = partners.find((partner) => partnerKey(partner.companyName) === partnerKey(item.companyName))?.logo
+    return logo ? { ...item, logo } : item
+  })
+  const names = new Set(withLogos.map((item) => partnerKey(item.companyName)))
+  return [...withLogos, ...partners.filter((item) => !names.has(partnerKey(item.companyName)))]
 }
 
 export async function catalogueAnalytics() {

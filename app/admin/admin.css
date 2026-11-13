@@ -224,10 +224,33 @@
 .admin-mfr-table { display: grid; gap: 6px; overflow-x: auto; }
 .admin-mfr-head, .admin-mfr-row {
   display: grid;
-  grid-template-columns: minmax(160px, .9fr) minmax(220px, 1.6fr) 110px;
+  grid-template-columns: minmax(160px, .9fr) minmax(180px, 1.4fr) 90px 120px;
   gap: 16px;
   align-items: center;
-  min-width: 560px;
+  min-width: 640px;
+}
+.admin-mfr-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-mfr-logo {
+  position: relative;
+  justify-self: start;
+}
+.admin-mfr-logo input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 .admin-mfr-head { padding: 0 14px 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #789096; font-weight: 700; }
 .admin-mfr-row {
