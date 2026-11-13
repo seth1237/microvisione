@@ -14,6 +14,7 @@ import type {
   RedirectRule,
 } from '@/lib/platform/content'
 import { normalizePath } from '@/lib/platform/content'
+import { legacyRedirect } from '@/lib/platform/legacy-paths'
 import { isCloudinaryConfigured, uploadSiteImage } from '@/lib/platform/cloudinary'
 import { excerptFromBody, parseEventBody } from '@/lib/platform/event-body'
 import { parseOfferProductPrices } from '@/lib/platform/offers'
@@ -992,12 +993,8 @@ export async function resolveRedirect(pathname: string): Promise<{ to: string; s
   const path = normalizePath(pathname)
   if (!path || path === '/') return null
   if (path === '/json' || path.startsWith('/json/')) return null
-  if (path.startsWith('/product-category/')) {
-    return { to: `/category/${path.slice('/product-category/'.length)}`, status: 301 }
-  }
-  if (path.startsWith('/product-tag/')) {
-    return { to: '/', status: 301 }
-  }
+  const legacy = legacyRedirect(path)
+  if (legacy) return legacy
   const mapped = await getRedirectByFrom(path).catch(() => null)
   if (mapped) return { to: mapped.to, status: mapped.status }
   return null

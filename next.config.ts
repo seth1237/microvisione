@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { accordApiUrl } from "./lib/platform/backend-url";
+import { legacyRedirectSources } from "./lib/platform/legacy-paths";
 
 const apiUrl = accordApiUrl();
 
@@ -9,6 +10,7 @@ const nextConfig: NextConfig = {
       { source: "/products", destination: "/", permanent: false },
       { source: "/offers", destination: "/gallery", permanent: false },
       { source: "/offers/:path*", destination: "/gallery", permanent: false },
+      ...legacyRedirectSources(),
     ];
   },
   async rewrites() {

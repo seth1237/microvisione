@@ -60,6 +60,25 @@ export async function catalogueMetadata(options: {
 
 export const utilityRobots: Metadata["robots"] = { index: false, follow: false };
 
+const RANKED_PRODUCT_SLUGS = new Set([
+  "blood-sugar-machine",
+  "chem-100",
+  "chem-200",
+  "chem-400",
+  "piccolo-chem",
+  "spotchem-d-concept",
+  "ams-sat450",
+  "hb-meter",
+])
+
+export function rankedProductCopy(product: { slug: string; name: string }, categoryName: string) {
+  if (!RANKED_PRODUCT_SLUGS.has(product.slug) || !categoryName) return null
+  return {
+    title: `${product.name}, ${categoryName} in Kenya`,
+    description: `${product.name}. ${categoryName} from Microvision Enterprises Ltd in Kenya.`,
+  }
+}
+
 export function metaText(value: string, max = 158) {
   const clean = value.replace(/\s+/g, " ").trim();
   if (clean.length <= max) return clean;

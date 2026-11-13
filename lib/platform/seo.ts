@@ -3,9 +3,8 @@ import { categoryHref, productCategoryHref, productHref, type CatalogProduct } f
 import { socialProfileUrls } from '@/lib/platform/socials'
 import { COMPANY } from '@/lib/platform/utils'
 
-export const DEFAULT_TITLE = 'Accord Medical Supplies Ltd | Medical Equipment Supplier in Kenya'
-export const DEFAULT_DESCRIPTION =
-  'Accord Medical Supplies Ltd supplies medical equipment, laboratory analysers, hospital furniture and diagnostic products to hospitals and clinics in Kenya. Eldoret office, Nairobi warehouse.'
+export const DEFAULT_TITLE = 'Microvision Enterprises Ltd | Medical and laboratory equipment in Kenya'
+export const DEFAULT_DESCRIPTION = `${COMPANY.name}. ${COMPANY.tagline} ${COMPANY.location}.`
 
 export function absoluteUrl(path = '/') {
   const suffix = path.startsWith('/') ? path : `/${path}`
@@ -86,7 +85,7 @@ export const CATEGORY_SEO: Record<string, CategorySeo> = {
   laboratory: {
     title: 'Laboratory Equipment for Hospitals in Kenya',
     description:
-      'Hematology, dry chemistry, coagulation and clinical chemistry analysers for hospital laboratories in Kenya. Request a quote from Accord Medical Supplies.',
+      'Hematology, dry chemistry, coagulation and clinical chemistry analysers for hospital laboratories in Kenya. Request a quote from Microvision Enterprises Ltd.',
     h1: 'Laboratory equipment',
     lede: 'Analysers and lab instruments used in Kenyan hospital and clinic laboratories, from hematology and chemistry to coagulation.',
     heading: 'Hematology, chemistry and coagulation',
@@ -102,7 +101,7 @@ export const CATEGORY_SEO: Record<string, CategorySeo> = {
   furniture: {
     title: 'Hospital Furniture | Beds, Overbed Tables & Cabinets',
     description:
-      'Hospital beds, overbed tables, bedside cabinets and ward furniture supplied to facilities in Kenya. Request a quote from Accord Medical Supplies.',
+      'Hospital beds, overbed tables, bedside cabinets and ward furniture supplied to facilities in Kenya. Request a quote from Microvision Enterprises Ltd.',
     h1: 'Hospital furniture',
     lede: 'Beds, overbed tables, cabinets and ward furniture for hospitals and clinics.',
     heading: 'Beds, tables and ward furniture',
@@ -182,7 +181,7 @@ export const CATEGORY_SEO: Record<string, CategorySeo> = {
   engineering: {
     title: 'Biomedical Engineering Equipment',
     description:
-      'Biomedical engineering tools and support equipment from Accord Medical Supplies in Kenya.',
+      'Biomedical engineering tools and support equipment from Microvision Enterprises Ltd in Kenya.',
     h1: 'Engineering equipment',
     lede: 'Tools and equipment used by biomedical engineering teams.',
     heading: 'Biomedical engineering',
@@ -193,7 +192,7 @@ export function categorySeo(slug: string, name: string): CategorySeo {
   return (
     CATEGORY_SEO[slug] || {
       title: `${name} | Medical Equipment Kenya`,
-      description: `${name} from Accord Medical Supplies Ltd for hospitals and clinics in Kenya. Browse the catalogue and request a quote.`,
+      description: `${name} from ${COMPANY.name} for hospitals and clinics in Kenya. Browse the catalogue and request a quote.`,
       h1: name,
       lede: `${name} currently listed for hospitals and clinics in Kenya.`,
       heading: `Products in ${name}`,
@@ -207,7 +206,7 @@ export function productMetaDescription(product: CatalogProduct) {
   const brand = product.manufacturer ? `${product.manufacturer} ` : ''
   const category = product.categoryName || 'medical equipment'
   return truncateMeta(
-    `${brand}${product.name} from Accord Medical Supplies. ${category} for hospitals and clinics in Kenya. Request a quote.`,
+    `${brand}${product.name} from ${COMPANY.name}. ${category} for hospitals and clinics in Kenya. Request a quote.`,
   )
 }
 
@@ -330,17 +329,11 @@ export function articleJsonLd(input: { title: string; description: string; path:
 }
 
 export function organizationJsonLd() {
-  const eldoret = {
-    '@type': 'PostalAddress',
-    streetAddress: 'Aico Plaza, second floor, room number 8',
-    addressLocality: 'Eldoret',
-    addressRegion: 'Uasin Gishu',
-    addressCountry: 'KE',
-  }
   const nairobi = {
     '@type': 'PostalAddress',
-    streetAddress: 'Unicorn Sales & Services Godowns, Warehouse No. 16, Baba Dogo Road',
+    streetAddress: 'Loipi Plaza, Lunga Lunga Road',
     addressLocality: 'Nairobi',
+    addressRegion: 'Nairobi',
     addressCountry: 'KE',
   }
   return {
@@ -351,33 +344,17 @@ export function organizationJsonLd() {
         '@id': `${COMPANY.url}/#organization`,
         name: COMPANY.name,
         legalName: COMPANY.name,
-        alternateName: ['Accord Medical Supplies', 'Accord Medical Supplies Limited', 'Accord Medical'],
+        alternateName: [COMPANY.shortName],
         url: COMPANY.url,
         logo: absoluteUrl(COMPANY.logo),
         image: absoluteUrl(COMPANY.logo),
         email: COMPANY.email,
-        telephone: [COMPANY.phone, COMPANY.phoneSecondary],
+        telephone: COMPANY.phone,
         sameAs: socialProfileUrls(),
         description: DEFAULT_DESCRIPTION,
-        foundingLocation: eldoret,
-        address: [eldoret, nairobi],
+        address: nairobi,
         areaServed: { '@type': 'Country', name: 'Kenya' },
-        openingHours: ['Mo-Fr 08:00-17:00', 'Sa 09:00-12:00'],
-        priceRange: '$$',
-        department: [
-          {
-            '@type': 'LocalBusiness',
-            name: `${COMPANY.shortName} Eldoret office`,
-            address: eldoret,
-            telephone: COMPANY.phone,
-          },
-          {
-            '@type': 'LocalBusiness',
-            name: `${COMPANY.shortName} Nairobi warehouse`,
-            address: nairobi,
-            telephone: COMPANY.phoneSecondary,
-          },
-        ],
+        openingHours: ['Mo-Fr 08:00-17:00', 'Sa 08:00-13:00'],
       },
       {
         '@type': 'WebSite',

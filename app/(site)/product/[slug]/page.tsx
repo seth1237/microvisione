@@ -14,7 +14,7 @@ import { liveCatalogues, liveProductBySlug } from "@/lib/api/live-catalogue";
 import { catalogueDownloadHref } from "@/lib/platform/content";
 import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
 import { getPriceVisibility } from "@/lib/platform/site-data";
-import { keywordList, metaText } from "@/lib/seo";
+import { keywordList, metaText, rankedProductCopy } from "@/lib/seo";
 import { absoluteUrl, site } from "@/lib/site";
 import type { Metadata } from "next";
 
@@ -37,10 +37,13 @@ export async function generateMetadata({
   const { slug } = await params;
   const product = await loadProduct(slug);
   if (!product) return { title: "Product" };
+  const categories = await getCategories();
+  const categoryName = categories.find((category) => category.id === product.categoryId)?.name || "";
   const written = product.seo?.title?.trim();
-  const title = written || product.name;
+  const ranked = written ? null : rankedProductCopy(product, categoryName);
+  const title = written || ranked?.title || product.name;
   const branded = Boolean(written && /microvision/i.test(written));
-  const description = metaText(product.seo?.description || product.shortDescription);
+  const description = metaText(product.seo?.description?.trim() || ranked?.description || product.shortDescription);
   const keywords = keywordList(product.seo?.keywords);
   const image = product.photoUrl;
   const alt = product.seo?.imageAlt || product.name;

@@ -8,10 +8,14 @@ import { getCategories, getProducts } from "@/lib/api/products";
 import { liveManufacturers } from "@/lib/api/site-media";
 import { site, whatsAppHref } from "@/lib/site";
 
+const homeTitle = "Microvision Enterprises Ltd | Medical and laboratory equipment in Kenya";
+
 export const metadata = {
+  title: { absolute: homeTitle },
+  description: site.positioning,
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Medical and laboratory equipment in Kenya",
+    title: homeTitle,
     description: site.positioning,
     url: "/",
   },
