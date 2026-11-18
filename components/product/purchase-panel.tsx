@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Check, Heart, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { postShopEvent } from "@/lib/analytics/shop";
@@ -9,7 +10,7 @@ import { StockBadge } from "@/components/product/stock-badge";
 import { Button } from "@/components/ui/button";
 import { productWhatsAppMessage, whatsAppHref } from "@/lib/site";
 import { cn } from "@/lib/utils/cn";
-import { useQuoteStore } from "@/store/quote";
+import { useCartStore } from "@/store/cart";
 import { useWishlistStore } from "@/store/wishlist";
 import type { Product } from "@/types";
 
@@ -20,23 +21,28 @@ export function PurchasePanel({
   product: Product;
   brandName: string;
 }) {
+  const router = useRouter();
   const { categories, showPrices } = useCatalogue();
   const category = categories.find((entry) => entry.id === product.categoryId || entry.slug === product.categoryId);
-  const addToQuote = useQuoteStore((state) => state.add);
+  const addToCart = useCartStore((state) => state.add);
   const toggleWish = useWishlistStore((state) => state.toggle);
   const wished = useWishlistStore((state) => state.ids.includes(product.id));
   const href = `/product/${product.slug}`;
   const whatsapp = whatsAppHref(productWhatsAppMessage({ name: product.name, quantity: 1, path: href }));
 
   function onQuote() {
-    addToQuote({
+    addToCart({
       productId: product.id,
       slug: product.slug,
       name: product.name,
-      brand: brandName,
       quantity: 1,
+      unitPrice: product.price,
+      priceIsPlaceholder: product.priceIsPlaceholder,
+      imageVariant: "primary",
+      categoryId: product.categoryId,
     });
-    toast.success(`${product.name} added to the quote basket`);
+    toast.success(`${product.name} added to the cart`);
+    router.push("/cart#quote-form");
     postShopEvent("/api/products/cart", {
       productId: product.id,
       productName: product.name,

@@ -22,13 +22,12 @@ export const useCartStore = create<CartState>()(
       lastOrder: null,
       add: (item) =>
         set((state) => {
-          const existing = state.items.find((line) => line.productId === item.productId);
+          const same = (line: CartItem) => line.productId === item.productId || line.slug === item.slug;
+          const existing = state.items.find(same);
           if (!existing) return { items: [...state.items, { ...item, quantity: clamp(item.quantity) }] };
           return {
             items: state.items.map((line) =>
-              line.productId === item.productId
-                ? { ...line, quantity: clamp(line.quantity + item.quantity) }
-                : line,
+              same(line) ? { ...line, ...item, quantity: clamp(line.quantity + item.quantity) } : line,
             ),
           };
         }),

@@ -5,14 +5,14 @@ import { utilityRobots } from "@/lib/seo";
 
 export const metadata = {
   title: "Cart",
-  description: "Review priced items before the demonstration checkout.",
+  description: "Review products in your cart and send a quote request to Microvision Enterprises Ltd.",
   robots: utilityRobots,
 };
 
 export default function CartPage() {
   return (
     <Container className="py-8">
-      <PageIntro title="Cart" lede="Only items with a buy option appear here. Analyzers stay in the quote basket." />
+      <PageIntro title="Cart" lede="Add products, then send a quote request with your name, location, and email." />
       <div className="mt-8">
         <CartView />
       </div>

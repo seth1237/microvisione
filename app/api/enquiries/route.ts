@@ -10,11 +10,14 @@ export async function POST(request: Request) {
   const name = text(body.name, 120)
   const phone = text(body.phone, 40)
   const email = text(body.email, 160)
-  if (!name || !phone) {
+  const kind = text(body.kind, 40) || "contact"
+  if (kind === "quote") {
+    if (!name || !email || !text(body.location, 160)) {
+      return Response.json({ success: false, message: "Name, location, and email are required" }, { status: 400 })
+    }
+  } else if (!name || !phone) {
     return Response.json({ success: false, message: "Name and phone are required" }, { status: 400 })
   }
-
-  const kind = text(body.kind, 40) || "contact"
   const organisation = text(body.organisation, 160)
   const role = text(body.role, 120)
   const location = text(body.location, 160)
@@ -36,24 +39,31 @@ export async function POST(request: Request) {
           : "Website enquiry"
   const mailed = await sendSiteMail({
     kind: mailKind,
-    subject: reference ? `${label} ${reference}` : label,
+    subject: kind === "quote" ? `RFQ FROM "${name}" FROM WEBSITE` : reference ? `${label} ${reference}` : label,
     replyTo: email || undefined,
-    text: [
-      label,
-      reference ? `Reference: ${reference}` : "",
-      `Name: ${name}`,
-      organisation ? `Organisation: ${organisation}` : "",
-      role ? `Role: ${role}` : "",
-      `Phone: ${phone}`,
-      email ? `Email: ${email}` : "",
-      location ? `Location: ${location}` : "",
-      subject ? `Subject: ${subject}` : "",
-      service ? `Service: ${service}` : "",
-      deliveryDate ? `Preferred delivery: ${deliveryDate}` : "",
-      products ? `Products: ${products}` : "",
-      "",
-      notes || "No notes.",
-    ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n"),
+    text: kind === "quote"
+      ? [
+          `Name: ${name}`,
+          `Location: ${location}`,
+          `Email: ${email}`,
+          products ? `Products: ${products}` : "Products: none listed",
+        ].join("\n")
+      : [
+          label,
+          reference ? `Reference: ${reference}` : "",
+          `Name: ${name}`,
+          organisation ? `Organisation: ${organisation}` : "",
+          role ? `Role: ${role}` : "",
+          `Phone: ${phone}`,
+          email ? `Email: ${email}` : "",
+          location ? `Location: ${location}` : "",
+          subject ? `Subject: ${subject}` : "",
+          service ? `Service: ${service}` : "",
+          deliveryDate ? `Preferred delivery: ${deliveryDate}` : "",
+          products ? `Products: ${products}` : "",
+          "",
+          notes || "No notes.",
+        ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n"),
   })
   if (!mailed.sent) {
     return Response.json({

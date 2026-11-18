@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
       { source: "/products", destination: "/", permanent: false },
       { source: "/offers", destination: "/gallery", permanent: false },
       { source: "/offers/:path*", destination: "/gallery", permanent: false },
+      { source: "/checkout", destination: "/cart", permanent: false },
+      { source: "/checkout/:path*", destination: "/cart", permanent: false },
+      { source: "/quote", destination: "/cart", permanent: false },
       ...legacyRedirectSources(),
     ];
   },

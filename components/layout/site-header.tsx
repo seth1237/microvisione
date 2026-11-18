@@ -20,8 +20,7 @@ import { useCatalogue } from "@/components/providers/catalogue-provider";
 import { Logo } from "@/components/layout/logo";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils/cn";
-import { formatKes } from "@/lib/utils/format";
-import { cartCount, cartTotal, useCartStore } from "@/store/cart";
+import { cartCount, useCartStore } from "@/store/cart";
 import { useWishlistStore } from "@/store/wishlist";
 
 const companyLinks = [
@@ -251,7 +250,6 @@ export function SiteHeader() {
                     ["/account", "Account"],
                     ["/wishlist", "Wishlist"],
                     ["/compare", "Compare"],
-                    ["/quote", "Quote basket"],
                     ["/cart", "Cart"],
                   ].map(([href, label]) => (
                     <li key={href}>
@@ -279,7 +277,7 @@ export function SiteHeader() {
         </div>
 
         <div className="col-start-3 flex items-center justify-self-end gap-1 sm:gap-2 lg:col-auto lg:ml-0 lg:gap-3">
-          <Link href="/quote" className="hidden h-11 items-center rounded-md bg-accent px-3 text-sm font-semibold text-on-accent lg:inline-flex">
+          <Link href="/cart#quote-form" className="hidden h-11 items-center rounded-md bg-accent px-3 text-sm font-semibold text-on-accent lg:inline-flex">
             Request quote
           </Link>
           <IconLink href="/account" label="Account" current={pathname.startsWith("/account")} className="hidden sm:inline-flex">
@@ -288,9 +286,8 @@ export function SiteHeader() {
           <IconLink href="/wishlist" label="Wishlist" count={wishes} current={pathname === "/wishlist"} className="hidden sm:inline-flex">
             <Heart className="h-4 w-4" aria-hidden="true" />
           </IconLink>
-          <IconLink href="/cart" label={items.length ? `Cart, ${formatKes(cartTotal(items))}` : "Cart"} count={cartCount(items)} current={pathname.startsWith("/cart") || pathname.startsWith("/checkout")} cartTarget>
+          <IconLink href="/cart" label={items.length ? `Cart, ${cartCount(items)} items` : "Cart"} count={cartCount(items)} current={pathname.startsWith("/cart")} cartTarget>
             <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-            {items.length > 0 ? <span className="hidden text-xs font-semibold xl:inline">{formatKes(cartTotal(items))}</span> : null}
           </IconLink>
         </div>
       </div>
