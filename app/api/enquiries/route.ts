@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         : kind === "service"
           ? "Service request"
           : "Website enquiry"
-  const mailed = await sendSiteMail({
+  const mail = {
     kind: mailKind,
     subject: kind === "quote" ? `RFQ FROM "${name}" FROM WEBSITE` : reference ? `${label} ${reference}` : label,
     replyTo: email || undefined,
@@ -64,8 +64,31 @@ export async function POST(request: Request) {
           "",
           notes || "No notes.",
         ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n"),
-  })
+  }
+  const mailed = await sendSiteMail(mail)
+  const payload = {
+    kind,
+    name,
+    organisation,
+    role,
+    email,
+    phone,
+    location,
+    notes,
+    reference,
+    products,
+    subject,
+    service,
+    deliveryDate,
+  }
   if (!mailed.sent) {
+    const forwarded = await fetch(accordApiPath("/api/enquiries"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...payload, sendMail: true }),
+      cache: "no-store",
+    }).catch(() => null)
+    if (forwarded?.ok) return Response.json({ success: true })
     return Response.json({
       success: false,
       message: mailed.reason === "smtp_unset" ? "Email is not set up yet." : "Could not send the enquiry email.",
@@ -75,16 +98,7 @@ export async function POST(request: Request) {
   await fetch(accordApiPath("/api/enquiries"), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      name,
-      organisation,
-      email,
-      phone,
-      location,
-      notes,
-      reference,
-      products,
-    }),
+    body: JSON.stringify(payload),
     cache: "no-store",
   }).catch(() => undefined)
 

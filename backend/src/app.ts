@@ -107,6 +107,7 @@ import { PRODUCT_CSV_TEMPLATE, productsToExcelXml } from '../../lib/platform/pro
 import { deleteCloudinaryImage, isCloudinaryConfigured, uploadProductImage } from '../../lib/platform/cloudinary'
 import { createERPQuote } from '../../lib/platform/erp'
 import { COMPANY } from '../../lib/platform/utils'
+import { inquiryMailKind, sendSiteMail } from '../../lib/platform/inquiry-mail'
 import {
   createJobApplication,
   deleteJobApplication,
@@ -821,12 +822,60 @@ app.post('/api/contact', async (c) => {
 })
 
 app.post('/api/enquiries', async (c) => {
-  if (!isMysqlConfigured()) return c.json({ success: false, message: 'Enquiry inbox is not configured' }, 503)
   try {
     const body = await c.req.json().catch(() => ({}))
     const name = textValue(body.name, 120)
     const phone = textValue(body.phone, 40)
-    if (!name || !phone) return c.json({ success: false, message: 'Name and phone are required' }, 400)
+    const email = textValue(body.email, 160)
+    const kind = textValue(body.kind, 40) || 'contact'
+    const location = textValue(body.location, 160)
+    const organisation = textValue(body.organisation, 160)
+    const role = textValue(body.role, 120)
+    const notes = textValue(body.notes, 2000)
+    const reference = textValue(body.reference, 40)
+    const products = textValue(body.products, 500)
+    const subject = textValue(body.subject, 120)
+    const service = textValue(body.service, 160)
+    const deliveryDate = textValue(body.deliveryDate, 40)
+    if (kind === 'quote') {
+      if (!name || !email || !location) return c.json({ success: false, message: 'Name, location, and email are required' }, 400)
+    } else if (!name || !phone) {
+      return c.json({ success: false, message: 'Name and phone are required' }, 400)
+    }
+    const mailKind = inquiryMailKind(kind, subject)
+    const label = mailKind === 'jobs' ? 'Job application' : kind === 'quote' ? 'Quote request' : kind === 'service' ? 'Service request' : 'Website enquiry'
+    if (body.sendMail) {
+      const mailed = await sendSiteMail({
+        kind: mailKind,
+        subject: kind === 'quote' ? `RFQ FROM "${name}" FROM WEBSITE` : reference ? `${label} ${reference}` : label,
+        replyTo: email || undefined,
+        text: kind === 'quote'
+          ? [`Name: ${name}`, `Location: ${location}`, `Email: ${email}`, products ? `Products: ${products}` : 'Products: none listed'].join('\n')
+          : [
+              label,
+              reference ? `Reference: ${reference}` : '',
+              `Name: ${name}`,
+              organisation ? `Organisation: ${organisation}` : '',
+              role ? `Role: ${role}` : '',
+              `Phone: ${phone}`,
+              email ? `Email: ${email}` : '',
+              location ? `Location: ${location}` : '',
+              subject ? `Subject: ${subject}` : '',
+              service ? `Service: ${service}` : '',
+              deliveryDate ? `Preferred delivery: ${deliveryDate}` : '',
+              products ? `Products: ${products}` : '',
+              '',
+              notes || 'No notes.',
+            ].filter((line, index, lines) => line !== '' || (index > 0 && lines[index - 1] !== '')).join('\n'),
+      })
+      if (!mailed.sent) {
+        return c.json({
+          success: false,
+          message: mailed.reason === 'smtp_unset' ? 'Email is not set up yet.' : 'Could not send the enquiry email.',
+        }, mailed.reason === 'smtp_unset' ? 503 : 502)
+      }
+    }
+    if (!isMysqlConfigured()) return c.json({ success: true })
     const item = await mysqlInsertDoc<{
       _id: string
       slug?: string
@@ -843,13 +892,13 @@ app.post('/api/enquiries', async (c) => {
       slug: '',
       published: true,
       name,
-      organisation: textValue(body.organisation, 160),
-      email: textValue(body.email, 160),
+      organisation,
+      email,
       phone,
-      location: textValue(body.location, 160),
-      notes: textValue(body.notes, 2000),
-      reference: textValue(body.reference, 40),
-      products: textValue(body.products, 500),
+      location,
+      notes,
+      reference,
+      products,
     })
     return c.json({ success: true, data: item })
   } catch (error) {

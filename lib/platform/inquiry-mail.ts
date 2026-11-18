@@ -23,6 +23,7 @@ function infoInbox() {
 function transport() {
   const port = Number(process.env.SMTP_PORT || 587)
   const secure = process.env.SMTP_SECURE === "true" || port === 465
+  const rejectUnauthorized = process.env.SMTP_TLS_REJECT_UNAUTHORIZED === "true"
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
@@ -32,6 +33,7 @@ function transport() {
       user: process.env.SMTP_USER || "",
       pass: process.env.SMTP_PASS || "",
     },
+    tls: { rejectUnauthorized },
   })
 }
 
@@ -62,7 +64,9 @@ export async function sendSiteMail(input: {
       })),
     })
     return { sent: true as const }
-  } catch {
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "send_failed"
+    console.error("[smtp]", code)
     return { sent: false as const, reason: "send_failed" as const }
   }
 }
