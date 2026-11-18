@@ -30,6 +30,8 @@ const nextConfig: NextConfig = {
     dangerouslyAllowLocalIP: true,
     contentDispositionType: "attachment",
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    minimumCacheTTL: 60 * 60 * 24 * 30,
+    qualities: [60, 75],
     remotePatterns: [
       { protocol: "https", hostname: "micro.codewithseth.co.ke", pathname: "/api/media/**" },
       { protocol: "http", hostname: "127.0.0.1", port: "4000", pathname: "/api/media/**" },

@@ -14,7 +14,7 @@ export default function QuotePage() {
     <Container className="py-8">
       <PageIntro
         title="Request a quote"
-        lede="Add equipment to the basket, then send your organisation details. You will get a reference number in this browser. Nothing is emailed yet."
+        lede="Add equipment to the basket, then send your organisation details. You will get a reference number in this browser. The request is emailed to sales@microvisione.com, with a copy to info@microvisione.com."
       />
       <div className="mt-8">
         <QuoteView />

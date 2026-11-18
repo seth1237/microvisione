@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { PublicManufacturer } from "@/lib/api/site-media";
 
 function marqueeItems(items: PublicManufacturer[]) {
@@ -21,7 +22,7 @@ export function ManufacturerCarousel({ items }: { items: PublicManufacturer[] })
       <ul className="mt-3 flex gap-4 overflow-x-auto px-4 [scrollbar-width:none] lg:hidden" aria-label="Partners">
         {items.map((item) => (
           <li key={item.id} className="flex w-[5.5rem] shrink-0 flex-col items-center justify-center">
-            <img src={item.logoUrl} alt="" className="h-10 w-full object-contain" />
+            <Image src={item.logoUrl} alt="" width={88} height={40} quality={60} className="h-10 w-full object-contain" />
             <p className="mt-1 text-center text-xs font-semibold text-ink">{item.name}</p>
           </li>
         ))}
@@ -34,7 +35,7 @@ export function ManufacturerCarousel({ items }: { items: PublicManufacturer[] })
         >
           {track.map((item, index) => (
             <li key={`${item.id}-${index}`} className="flex w-[300px] shrink-0 flex-col items-center justify-center" aria-hidden={index >= base.length}>
-              <img src={item.logoUrl} alt={index >= base.length ? "" : item.name} className="h-[100px] w-[300px] object-contain" />
+              <Image src={item.logoUrl} alt={index >= base.length ? "" : item.name} width={300} height={100} quality={60} className="h-[100px] w-[300px] object-contain" />
             </li>
           ))}
         </ul>

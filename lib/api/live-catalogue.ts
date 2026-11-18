@@ -102,7 +102,7 @@ async function apiJson<T>(path: string): Promise<T | null> {
   cacheLife("minutes");
   if (!catalogueApiSelected()) return null;
   try {
-    const response = await fetch(accordApiPath(path));
+    const response = await fetch(accordApiPath(path), { next: { revalidate: 300 } });
     if (!response.ok) return null;
     return (await response.json()) as T;
   } catch {

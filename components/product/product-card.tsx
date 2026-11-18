@@ -220,6 +220,9 @@ export function ProductCard({
                 alt={product.name}
                 fill
                 sizes={isList ? "(max-width: 640px) 100vw, 240px" : "(max-width: 640px) 50vw, (max-width: 1280px) 25vw, 20vw"}
+                priority={index === 0 && !isList}
+                fetchPriority={index === 0 && !isList ? "high" : undefined}
+                loading={index === 0 && !isList ? "eager" : "lazy"}
                 className="object-contain transition-transform duration-[400ms] ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                 onError={() => setPhotoFailed(true)}
               />

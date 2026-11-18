@@ -32,6 +32,15 @@ export const metadata: Metadata = {
   },
 };
 
+function ApiHints() {
+  return (
+    <>
+      <link rel="preconnect" href="https://micro.codewithseth.co.ke" />
+      <link rel="dns-prefetch" href="https://micro.codewithseth.co.ke" />
+    </>
+  );
+}
+
 export const viewport: Viewport = {
   themeColor: palette.brandBlue,
   width: "device-width",
@@ -42,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col font-sans">
+        <ApiHints />
         <style href="microvision-tokens" precedence="default">
           {tokenCss}
         </style>

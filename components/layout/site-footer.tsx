@@ -98,7 +98,7 @@ export function SiteFooter({ categories }: { categories: CategoryWithCount[] }) 
             © {site.catalogueAsOf.slice(0, 4)} Microvision Enterprises Ltd. Catalogue illustrations are placeholders.
           </p>
           <a href="https://codewithseth.co.ke" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs text-on-dark/80 hover:text-white">
-            <img src="/brand/smo.jpg" alt="" className="h-6 w-6 rounded-full bg-white object-cover" />
+            <img src="/brand/smo.jpg" alt="" width={24} height={24} className="h-6 w-6 rounded-full bg-white object-cover" />
             Built by codewithseth.co.ke
           </a>
         </div>

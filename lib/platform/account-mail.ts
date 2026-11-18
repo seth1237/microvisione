@@ -60,7 +60,7 @@ export function sendPurchaseEmail(input: {
   receipt: string;
   items: string[];
 }) {
-  const shopCopy = process.env.SMTP_USER || "";
+  const shopCopy = process.env.SMTP_USER || process.env.MAIL_SALES || "sales@microvisione.com";
   return deliver({
     to: [input.to, shopCopy],
     subject: `M-Pesa payment received ${input.reference}`,

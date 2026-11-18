@@ -44,7 +44,7 @@ export function QuoteView() {
       </section>
       <section id="quote-form" aria-labelledby="quote-form-heading" className="scroll-mt-28 rounded-md border border-line bg-surface p-5">
         <h2 id="quote-form-heading" className="text-xl">Request a quote</h2>
-        <p className="mt-2 text-sm text-muted">Tell us who to reply to. A reference number is created in this browser only.</p>
+        <p className="mt-2 text-sm text-muted">Tell us who to reply to. The request is emailed to sales, with a copy to info.</p>
         <div className="mt-4">
           <EnquiryForm
             kind="quote"
@@ -65,20 +65,6 @@ export function QuoteView() {
               };
               setLastRequest(request);
               clear();
-              void fetch("/api/enquiries", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  name: fields.name,
-                  organisation: fields.organisation,
-                  email: fields.email,
-                  phone: fields.phone,
-                  location: fields.location,
-                  notes: fields.notes,
-                  reference,
-                  products: lines.map((line) => line.name).join(", "),
-                }),
-              }).catch(() => undefined);
             }}
           />
         </div>

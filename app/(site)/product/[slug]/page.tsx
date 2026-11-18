@@ -9,7 +9,6 @@ import { PurchasePanel } from "@/components/product/purchase-panel";
 import { WhiteCanvas } from "@/components/product/white-canvas";
 import { JsonLd } from "@/components/seo/json-ld";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { CategorySidebar } from "@/components/home/home-catalogue";
 import { liveCatalogues, liveProductBySlug } from "@/lib/api/live-catalogue";
 import { catalogueDownloadHref } from "@/lib/platform/content";
 import { getBrands, getCategories, getProductBySlug, getProducts, getRelatedProducts } from "@/lib/api/products";
@@ -80,10 +79,9 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
   const { slug } = await params;
   const product = await loadProduct(slug);
   if (!product) notFound();
-  const [brands, categories, catalogue, related, catalogues, showPrices] = await Promise.all([
+  const [brands, categories, related, catalogues, showPrices] = await Promise.all([
     getBrands(),
     getCategories(),
-    getProducts(),
     getRelatedProducts(product),
     liveCatalogues(),
     getPriceVisibility(),
@@ -97,17 +95,6 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
 
   return (
     <div className="mx-auto w-full max-w-[1600px] bg-white px-3 pt-6 pb-4 sm:px-6 lg:px-8 lg:py-10">
-      <div className="grid items-start gap-6 lg:grid-cols-[16.5rem_minmax(0,1fr)] lg:gap-6">
-        <CategorySidebar
-          categories={categories}
-          products={catalogue}
-          activeId={category?.id ?? null}
-          activeSlug={category?.slug || ""}
-          currentSlug={product.slug}
-          linkCategories
-          className="sticky top-36 hidden lg:block"
-        />
-        <div className="min-w-0">
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -200,8 +187,6 @@ async function ProductContent({ params }: { params: Promise<{ slug: string }> })
           </ul>
         </section>
       ) : null}
-        </div>
-      </div>
       <ProductView
         productId={product.id}
         productName={product.name}

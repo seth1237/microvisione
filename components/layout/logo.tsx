@@ -7,6 +7,8 @@ export function Logo({ className }: { className?: string }) {
       alt="Microvision Enterprises Ltd"
       width={200}
       height={47}
+      quality={60}
+      sizes="200px"
       priority
       className={className ?? "h-[47px] w-[200px]"}
     />

@@ -48,6 +48,7 @@ export function JobApplyForm({
   return (
     <form className="grid gap-4" onSubmit={submit}>
       {job ? <input type="hidden" name="jobId" value={job.id} /> : null}
+      {job ? <input type="hidden" name="jobTitle" value={job.title} /> : null}
       <label className="text-sm font-semibold">
         Full name
         <input name="fullName" required className={control} autoComplete="name" />

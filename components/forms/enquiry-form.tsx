@@ -61,6 +61,8 @@ export function EnquiryForm({
   const [fields, setFields] = useState<Fields>(empty);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [reference, setReference] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sendError, setSendError] = useState("");
 
   function set<K extends keyof Fields>(key: K, value: Fields[K]) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -91,10 +93,11 @@ export function EnquiryForm({
     return next;
   }
 
-  function onSubmit(event: React.FormEvent) {
+  async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     const next = validate(fields);
     setErrors(next);
+    setSendError("");
     if (Object.keys(next).length > 0) return;
     if (fields.website.trim()) {
       setReference(makeReference(kind === "quote" ? "MVQ" : kind === "career" ? "MVC" : "MVS"));
@@ -102,8 +105,35 @@ export function EnquiryForm({
     }
     const ref = makeReference(kind === "quote" ? "MVQ" : kind === "career" ? "MVC" : "MVS");
     const phone = normalizeKenyanPhone(fields.phone) ?? fields.phone;
+    const completed = { ...fields, phone };
+    setBusy(true);
+    const response = await fetch("/api/enquiries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind,
+        name: completed.name,
+        organisation: completed.organisation,
+        role: completed.role,
+        email: completed.email,
+        phone,
+        location: completed.location,
+        notes: completed.notes,
+        reference: ref,
+        subject: completed.subject,
+        service: completed.service,
+        deliveryDate: completed.deliveryDate,
+        products: lines.map((line) => `${line.name} × ${line.quantity}`).join(", "),
+      }),
+    }).catch(() => null);
+    const payload = await response?.json().catch(() => ({})) as { message?: string };
+    setBusy(false);
+    if (!response?.ok) {
+      setSendError(payload.message || "Could not send the request. Try again or call 0790 669 988.");
+      return;
+    }
     setReference(ref);
-    onComplete?.({ reference: ref, fields: { ...fields, phone } });
+    onComplete?.({ reference: ref, fields: completed });
   }
 
   if (reference) {
@@ -111,7 +141,7 @@ export function EnquiryForm({
       <div className="rounded-md border border-success/30 bg-success-soft p-5" role="status">
         <h2 className="text-xl text-success">Request received</h2>
         <p className="mt-2 text-ink">
-          Reference <strong>{reference}</strong>. This is a demonstration — nothing was sent to a server or to WhatsApp.
+          Reference <strong>{reference}</strong>. The request has been emailed to Microvision.
         </p>
         <p className="mt-2 text-sm text-muted">Keep the reference if you call 0790 669 988.</p>
       </div>
@@ -227,7 +257,8 @@ export function EnquiryForm({
         </span>
       </label>
       {errors.consent ? <p className="text-sm text-danger" role="alert">{errors.consent}</p> : null}
-      <Button type="submit">{kind === "career" ? "Submit application" : kind === "quote" ? "Submit quote request" : "Send"}</Button>
+      {sendError ? <p className="text-sm text-danger" role="alert">{sendError}</p> : null}
+      <Button type="submit" disabled={busy}>{busy ? "Sending…" : kind === "career" ? "Submit application" : kind === "quote" ? "Submit quote request" : "Send"}</Button>
     </form>
   );
 }

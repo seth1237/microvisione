@@ -12,7 +12,7 @@ export const COMPANY = {
   domain: 'www.microvisione.com',
   url: (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.microvisione.com').replace(/\/$/, ''),
   email: 'info@microvisione.com',
-  salesEmail: 'info@microvisione.com',
+  salesEmail: 'sales@microvisione.com',
   careersEmail: 'info@microvisione.com',
   phone: '0790 669 988',
   phoneHref: 'tel:+254790669988',

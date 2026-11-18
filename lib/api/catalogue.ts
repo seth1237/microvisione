@@ -8,7 +8,7 @@ import type { CatalogueBundle } from "@/types";
 
 async function readShowPrices() {
   try {
-    const response = await fetch(accordApiPath("/api/settings/prices"));
+    const response = await fetch(accordApiPath("/api/settings/prices"), { next: { revalidate: 300 } });
     if (!response.ok) return false;
     const payload = (await response.json()) as { showPrices?: boolean };
     return payload.showPrices !== false;
