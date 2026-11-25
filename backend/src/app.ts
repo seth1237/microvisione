@@ -51,7 +51,8 @@ import {
   listOffers,
   listRedirects,
   recordCatalogueDownload,
-  replaceCompanyProfileFromPdf,
+  getCompanyProfilePdf,
+  replaceCompanyProfilePdf,
   resolveRedirect,
   updateCompanyProfilePage,
   updateEvent,
@@ -412,7 +413,27 @@ app.get('/api/installations/:slug', async (c) => {
   if (!item) return c.json({ success: false, message: 'Project not found' }, 404)
   return c.json({ success: true, data: item })
 })
-app.get('/api/company-profile', async (c) => c.json({ success: true, data: await listCompanyProfilePages(true).catch(() => []) }))
+app.get('/api/company-profile', async (c) => {
+  const pdf = await getCompanyProfilePdf().catch(() => null)
+  return c.json({
+    success: true,
+    data: [],
+    download: pdf ? { available: true, filename: pdf.filename || 'company-profile.pdf' } : null,
+  })
+})
+
+app.get('/api/company-profile/download', async (c) => {
+  const pdf = await getCompanyProfilePdf().catch(() => null)
+  if (!pdf?.data) return c.json({ success: false, message: 'Company profile is not available' }, 404)
+  const filename = pdf.filename || 'company-profile.pdf'
+  return new Response(new Uint8Array(pdf.data), {
+    headers: {
+      'Content-Type': pdf.mime || 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename.replace(/"/g, '')}"`,
+      'Cache-Control': 'private, no-store',
+    },
+  })
+})
 app.get('/api/catalogues', async (c) => c.json({ success: true, data: await listCatalogues().catch(() => []) }))
 app.get('/api/settings/prices', async (c) => c.json({ success: true, showPrices: await getPriceVisibility() }))
 
@@ -2046,7 +2067,12 @@ app.delete('/api/admin/installations/:id', async (c) => {
 app.get('/api/admin/company-profile', async (c) => {
   const auth = requireAdmin(c)
   if (auth.error) return c.json(auth.error, auth.status)
-  return c.json({ success: true, data: await listCompanyProfilePages(false) })
+  const pdf = await getCompanyProfilePdf().catch(() => null)
+  return c.json({
+    success: true,
+    data: await listCompanyProfilePages(false),
+    download: pdf ? { available: true, filename: pdf.filename || 'company-profile.pdf' } : null,
+  })
 })
 
 app.post('/api/admin/company-profile', async (c) => {
@@ -2108,8 +2134,15 @@ app.post('/api/admin/company-profile/pdf', async (c) => {
   const form = await c.req.formData()
   const file = form.get('file')
   if (!(file instanceof File) || file.size <= 0) return c.json({ success: false, message: 'Upload a PDF company profile' }, 400)
-  const pages = await replaceCompanyProfileFromPdf(Buffer.from(await file.arrayBuffer()), file.name || 'profile.pdf')
-  return c.json({ success: true, count: pages.length, data: pages })
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  if (!isPdf) return c.json({ success: false, message: 'Upload a PDF company profile' }, 400)
+  if (file.size > 45 * 1024 * 1024) return c.json({ success: false, message: 'Upload a PDF under 45MB' }, 400)
+  try {
+    const stored = await replaceCompanyProfilePdf(Buffer.from(await file.arrayBuffer()), file.name || 'company-profile.pdf')
+    return c.json({ success: true, download: { available: true, filename: stored.filename } })
+  } catch (error) {
+    return c.json({ success: false, message: error instanceof Error ? error.message : 'Could not save the company profile' }, 500)
+  }
 })
 
 export default app

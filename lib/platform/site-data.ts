@@ -186,6 +186,13 @@ export async function listCompanyProfilePages(publishedOnly = true): Promise<Com
   return payload?.data || []
 }
 
+export async function getCompanyProfileDownload(admin = false) {
+  const path = admin ? '/api/admin/company-profile' : '/api/company-profile'
+  const payload = await backendJson<{ download?: { available?: boolean; filename?: string } | null }>(path)
+  if (!payload?.download?.available) return null
+  return payload.download.filename || 'company-profile.pdf'
+}
+
 export async function listCatalogues(): Promise<Catalogue[]> {
   const payload = await backendJson<{ data: Catalogue[] }>('/api/catalogues')
   return payload?.data || []

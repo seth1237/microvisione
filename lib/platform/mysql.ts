@@ -743,6 +743,35 @@ export async function mysqlGetFile(id: string | number) {
   }
 }
 
+export async function mysqlGetLatestFileByOwner(kind: string, ownerKey: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<FileRow[]>(
+    'SELECT id, kind, owner_key, filename, mime, file_data, storage_path, created_at FROM accord_nx_files WHERE kind = ? AND owner_key = ? ORDER BY id DESC LIMIT 1',
+    [kind, ownerKey],
+  )
+  const row = rows[0]
+  if (!row) return null
+  return {
+    id: row.id,
+    kind: row.kind,
+    ownerKey: row.owner_key,
+    filename: row.filename,
+    mime: row.mime,
+    data: await fileBytesFromRow(row),
+  }
+}
+
+export async function mysqlDeleteFilesByOwner(kind: string, ownerKey: string) {
+  await ensureMysqlSchema()
+  const pool = await getPool()
+  const [rows] = await pool.query<FileRow[]>(
+    'SELECT id FROM accord_nx_files WHERE kind = ? AND owner_key = ?',
+    [kind, ownerKey],
+  )
+  for (const row of rows) await mysqlDeleteFile(String(row.id))
+}
+
 type JobApplicationRow = RowDataPacket & {
   id: number
   full_name: string

@@ -3,7 +3,7 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 
-const DOCUMENT_KINDS = new Set(['catalogue', 'document', 'job-cv'])
+const DOCUMENT_KINDS = new Set(['catalogue', 'document', 'job-cv', 'company-profile'])
 
 export function isDocumentKind(kind: string) {
   return DOCUMENT_KINDS.has(kind)

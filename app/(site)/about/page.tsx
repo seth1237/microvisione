@@ -1,8 +1,8 @@
-import { ProfileBook } from "@/components/about/profile-book";
+import { Download } from "lucide-react";
 import { Reveal } from "@/components/motion/reveal";
 import { Container } from "@/components/ui/container";
 import { PageIntro } from "@/components/ui/page-intro";
-import { getCompanyProfilePages } from "@/lib/api/content";
+import { getCompanyProfileDownload } from "@/lib/api/content";
 import { liveCertifications } from "@/lib/api/certifications";
 
 export const instant = false;
@@ -14,9 +14,9 @@ export const metadata = {
 };
 
 export default async function AboutPage() {
-  const [certificates, profilePages] = await Promise.all([
+  const [certificates, profile] = await Promise.all([
     liveCertifications().catch(() => []),
-    getCompanyProfilePages(),
+    getCompanyProfileDownload(),
   ]);
   return (
     <Container className="py-8">
@@ -39,10 +39,18 @@ export default async function AboutPage() {
         </p>
       </div>
       </Reveal>
-      {profilePages.length ? (
+      {profile ? (
         <section className="mt-10" aria-labelledby="company-profile">
           <h2 id="company-profile" className="text-2xl">Company profile</h2>
-          <ProfileBook pages={profilePages} />
+          <p className="mt-2 max-w-xl text-muted">Download the company profile PDF.</p>
+          <a
+            href={profile.href}
+            download={profile.filename}
+            className="mt-4 inline-flex h-11 items-center gap-2 rounded-md bg-accent px-4 text-sm font-semibold text-on-accent hover:bg-accent-deep"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Download company profile
+          </a>
         </section>
       ) : null}
       {certificates.length ? (

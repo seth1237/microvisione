@@ -9,17 +9,14 @@ import type {
   EventPost,
   Installation,
   ManufacturerSubmission,
-  MediaAsset,
   Offer,
   RedirectRule,
 } from '@/lib/platform/content'
 import { normalizePath } from '@/lib/platform/content'
 import { legacyRedirect } from '@/lib/platform/legacy-paths'
-import { isCloudinaryConfigured, uploadSiteImage } from '@/lib/platform/cloudinary'
 import { excerptFromBody, parseEventBody } from '@/lib/platform/event-body'
 import { parseOfferProductPrices } from '@/lib/platform/offers'
 import { emptySeo, parseSeo } from '@/lib/platform/seo-fields'
-import { prepareStoredImage } from '@/lib/platform/image-convert'
 import { ensureIndexes, getCollection, isMongoConfigured } from '@/lib/platform/mongodb'
 import {
   isMysqlConfigured,
@@ -47,6 +44,8 @@ import {
   mysqlOfferEventStats,
   mysqlRecordOfferEvent,
   mysqlDeleteFile,
+  mysqlDeleteFilesByOwner,
+  mysqlGetLatestFileByOwner,
   mysqlListProfilePages,
   mysqlRecordCatalogueDownload,
   mysqlSaveFile,
@@ -56,7 +55,6 @@ import {
   mysqlUpsertCatalogProduct,
 } from '@/lib/platform/mysql'
 import { invalidateCatalog } from '@/lib/platform/catalog-data'
-import { renderPdfPages } from '@/lib/platform/pdf-pages'
 
 type WithDates<T> = Omit<T, '_id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'startDate' | 'endDate' | 'startAt'> & {
   _id?: ObjectId
@@ -1088,38 +1086,33 @@ export async function deleteCompanyProfilePage(id: string): Promise<CompanyProfi
   return existing
 }
 
-async function storeProfilePageImage(buffer: Buffer, filename: string, index: number): Promise<MediaAsset> {
-  const prepared = await prepareStoredImage(buffer, filename, 'image/jpeg')
-  if (isMysqlConfigured()) {
-    return mysqlSaveFile({
-      kind: 'profile',
-      ownerKey: `company-profile/${index}`,
-      filename: prepared.filename,
-      mime: prepared.mime,
-      buffer: prepared.buffer,
-    })
-  }
-  if (!isCloudinaryConfigured()) throw new Error('Image storage is not configured')
-  const uploaded = await uploadSiteImage(prepared.buffer, 'tarumed/profile', `pdf-${index}`)
-  return { publicId: uploaded.public_id, secureUrl: uploaded.secure_url }
+const COMPANY_PROFILE_PDF_KIND = 'company-profile'
+const COMPANY_PROFILE_PDF_OWNER = 'download'
+
+function companyProfilePdfName(filename: string) {
+  const base = filename.replace(/[^\w.\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'company-profile'
+  return base.toLowerCase().endsWith('.pdf') ? base : `${base}.pdf`
 }
 
-export async function replaceCompanyProfileFromPdf(pdf: Buffer, filename: string): Promise<CompanyProfilePage[]> {
-  const rendered = await renderPdfPages(pdf)
+export async function getCompanyProfilePdf() {
+  if (!isMysqlConfigured()) return null
+  return mysqlGetLatestFileByOwner(COMPANY_PROFILE_PDF_KIND, COMPANY_PROFILE_PDF_OWNER)
+}
+
+export async function replaceCompanyProfilePdf(pdf: Buffer, filename: string) {
+  if (!isMysqlConfigured()) throw new Error('Document storage is not configured')
   const existing = await listCompanyProfilePages(false)
   for (const page of existing) await deleteCompanyProfilePage(page._id)
-  const pages: CompanyProfilePage[] = []
-  for (let index = 0; index < rendered.length; index += 1) {
-    const image = await storeProfilePageImage(rendered[index].buffer, rendered[index].filename || `${filename}-${index + 1}.jpg`, index + 1)
-    pages.push(await createCompanyProfilePage({
-      title: index === 0 ? 'Cover' : `Page ${index + 1}`,
-      body: '',
-      image,
-      order: index + 1,
-      published: true,
-    }))
-  }
-  return pages
+  await mysqlDeleteFilesByOwner(COMPANY_PROFILE_PDF_KIND, COMPANY_PROFILE_PDF_OWNER)
+  const storedName = companyProfilePdfName(filename)
+  await mysqlSaveFile({
+    kind: COMPANY_PROFILE_PDF_KIND,
+    ownerKey: COMPANY_PROFILE_PDF_OWNER,
+    filename: storedName,
+    mime: 'application/pdf',
+    buffer: pdf,
+  })
+  return { filename: storedName }
 }
 
 export async function recordOfferEvent(input: {

@@ -5,7 +5,7 @@ import { certificates, jobs, services } from "@/data/content";
 import { offers } from "@/data/offers";
 import { products } from "@/data/products";
 import { liveEvents, liveJobs, liveOffers } from "@/lib/api/live-catalogue";
-import { accordApiPath, catalogueApiSelected, publicAssetUrl } from "@/lib/platform/backend-url";
+import { accordApiPath, catalogueApiSelected } from "@/lib/platform/backend-url";
 import type { CatalogueEvent, Job, Offer, Product } from "@/types";
 
 async function staticOffers(): Promise<Offer[]> {
@@ -45,28 +45,23 @@ export async function getServices() {
   return services;
 }
 
-export async function getCompanyProfilePages() {
+export async function getCompanyProfileDownload() {
   "use cache";
   cacheLife("minutes");
-  if (!catalogueApiSelected()) return [];
+  if (!catalogueApiSelected()) return null;
   try {
     const response = await fetch(accordApiPath("/api/company-profile"));
-    if (!response.ok) return [];
+    if (!response.ok) return null;
     const payload = (await response.json()) as {
-      data?: Array<{ _id: string; title: string; body: string; order?: number; image?: { secureUrl?: string } | null; published?: boolean }>;
+      download?: { available?: boolean; filename?: string } | null;
     };
-    return (payload.data || [])
-      .filter((page) => page.published !== false && page.title)
-      .map((page) => ({
-        id: page._id,
-        title: page.title,
-        body: page.body || "",
-        order: Number(page.order) || 0,
-        imageUrl: publicAssetUrl(page.image?.secureUrl),
-      }))
-      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+    if (!payload.download?.available) return null;
+    return {
+      href: "/api/company-profile/download",
+      filename: payload.download.filename || "company-profile.pdf",
+    };
   } catch {
-    return [];
+    return null;
   }
 }
 

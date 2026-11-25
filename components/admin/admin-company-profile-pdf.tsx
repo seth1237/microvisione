@@ -3,7 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export function AdminCompanyProfilePdf({ pageCount }: { pageCount: number }) {
+export function AdminCompanyProfilePdf({
+  filename,
+}: {
+  filename?: string
+}) {
   const router = useRouter()
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
@@ -16,22 +20,19 @@ export function AdminCompanyProfilePdf({ pageCount }: { pageCount: number }) {
       setMessage('Choose a PDF company profile')
       return
     }
-    if (pageCount > 0 && !window.confirm('This replaces the current flip-book with each page of the PDF. Continue?')) {
-      return
-    }
     const data = new FormData()
     data.set('file', file)
     setSaving(true)
     setMessage('')
     const response = await fetch('/api/admin/company-profile/pdf', { method: 'POST', body: data })
-    const payload = await response.json().catch(() => ({ message: 'Could not convert that PDF' }))
+    const payload = await response.json().catch(() => ({ message: 'Could not save that PDF' }))
     setSaving(false)
     if (!response.ok) {
-      setMessage(payload.message || 'Could not convert that PDF')
+      setMessage(payload.message || 'Could not save that PDF')
       return
     }
     form.reset()
-    setMessage(`Converted ${payload.count || 0} PDF pages into the flip-book.`)
+    setMessage('Company profile PDF saved. Visitors can download it from About.')
     router.refresh()
   }
 
@@ -39,17 +40,25 @@ export function AdminCompanyProfilePdf({ pageCount }: { pageCount: number }) {
     <form className="admin-card" onSubmit={onSubmit}>
       <div className="card-title">
         <div>
-          <h3>Upload profile PDF</h3>
-          <span>Each page of the PDF becomes a page in the About flip-book. Files up to 45MB are accepted.</span>
+          <h3>Company profile PDF</h3>
+          <span>This file is offered as a download on the About page. It is not shown as pages on the site. Files up to 45MB are accepted.</span>
         </div>
       </div>
+      {filename ? (
+        <p>
+          Current file: {filename}{' '}
+          <a className="text-link" href="/api/company-profile/download" download={filename}>Download</a>
+        </p>
+      ) : (
+        <p>No company profile PDF is published yet.</p>
+      )}
       <label>Company profile PDF
         <input name="file" type="file" accept="application/pdf,.pdf" required />
       </label>
       {message && <p className="admin-message">{message}</p>}
       <div className="admin-job-actions">
         <button className="button button-primary" disabled={saving}>
-          {saving ? 'Converting PDF…' : 'Convert to flip-book'}
+          {saving ? 'Saving PDF…' : filename ? 'Replace PDF' : 'Save PDF'}
         </button>
       </div>
     </form>
